@@ -22,11 +22,13 @@ import com.j2js.assembly.ClassUnit;
 import com.j2js.assembly.Project;
 import com.j2js.assembly.Signature;
 import com.j2js.dom.*;
+import com.veracloud.logging.LogFactory;
 
 /**
  * @author wolfgang
  */
 public class Parser {
+   private static final com.veracloud.logging.Log sLog = LogFactory.get(Parser.class);
     
     public static String getResourcePath(String name) {
         name = name.replace('.', '/') + ".class";
@@ -77,7 +79,7 @@ public class Parser {
                 fileUnit.setSuperUnit(superUnit);
             //}
             
-            // TODO: This should be executed also for java.lang.Object.
+            // TODO: This should be executed also for java.lang.Object. (ggeorg???)
             String[] interfaceNames = jc.getInterfaceNames();
             for (int i=0; i<interfaceNames.length; i++) {
                 ObjectType interfaceType = new ObjectType(interfaceNames[i]);
@@ -87,8 +89,7 @@ public class Parser {
         }
         
         Field[] fields = jc.getFields();
-        for (int i=0; i<fields.length; i++) {
-            Field field = fields[i];
+        for (Field field : fields) {
             VariableDeclaration variableDecl = new VariableDeclaration(VariableDeclaration.NON_LOCAL);
             variableDecl.setName(field.getName());
             variableDecl.setModifiers(field.getModifiers());
@@ -97,9 +98,8 @@ public class Parser {
             typeDecl.addField(variableDecl);
         }
         
-        for (int i=0; i<bcelMethods.length; i++) {
-            Method method = bcelMethods[i];
-            
+        for (Method method : bcelMethods) {
+
             // Java 5 generates a "bridge synthetic" accessor method for some
             // methods used in a generic context (for example Comparator.compare(Object, Object)
             // will call Comparator.compare(String, String)). Those methods are essential!
@@ -122,77 +122,80 @@ public class Parser {
         return typeDecl;
     }
 
-    public void parseMethod(TypeDeclaration typeDecl, MethodDeclaration methodDecl, Method method) {
-        Type[] types = method.getArgumentTypes();
-        
-        int offset;
-        if (Modifier.isStatic(methodDecl.getAccess())) {
-            offset = 0;
-        } else {
-            // Reference to this is first argument for member method.
-            offset = 1;
-        }
-        for (int i=0; i<types.length; i++) {
-        	VariableDeclaration variableDecl = new VariableDeclaration(VariableDeclaration.LOCAL_PARAMETER);
-        	variableDecl.setName(VariableDeclaration.getLocalVariableName(method, offset, 0));
-        	variableDecl.setType(types[i]);
-        	methodDecl.addParameter(variableDecl);
-            offset += types[i].getSize();
-        }
-        
-        if (methodDecl.getCode() == null) return;
-        
-        Log.getLogger().debug("Parsing " + methodDecl.toString());
-        Pass1 pass1 = new Pass1(jc);
-        
-        try {
-            pass1.parse(method, methodDecl);
-        } catch (Throwable ex) {
-            ASTNode node = null;
-            if (ex instanceof ParseException) {
-                node = ((ParseException) ex).getAstNode();
-            } else {
-                node = Pass1.getCurrentNode();
-            }
+   public void parseMethod(TypeDeclaration typeDecl, MethodDeclaration methodDecl, Method method) {
+      // sLog.t("typeDecl=%s, methodDecl=%s, method=%s", typeDecl, methodDecl,
+      // method);
+      Type[] types = method.getArgumentTypes();
+      
+      int offset;
+      if (Modifier.isStatic(methodDecl.getAccess())) {
+         offset = 0;
+      } else {
+         // Reference to this is first argument for member method.
+         offset = 1;
+      }
 
-            if (J2JSCompiler.compiler.isFailOnError()) {
-                throw Utils.generateException(ex, methodDecl, node);
-            } else {
-                String msg = Utils.generateExceptionMessage(methodDecl, node);
-                J2JSCompiler.errorCount++;
-                Log.getLogger().error(msg + "\n" + Utils.stackTraceToString(ex));
-            }
-            
-            Block body = new Block();
-            ThrowStatement throwStmt = new ThrowStatement();
-            MethodBinding binding = MethodBinding.lookup("java.lang.RuntimeException", "<init>", "(java/lang/String)V;");
-            ClassInstanceCreation cic = new ClassInstanceCreation(methodDecl, binding);
-            cic.addArgument(new StringLiteral("Unresolved decompilation problem"));
-            throwStmt.setExpression(cic);
-            body.appendChild(throwStmt);
-            methodDecl.setBody(body);
-
-        }
-        
-        // Remove from body last expressionless return statement.
-        if (J2JSCompiler.compiler.optimize && methodDecl.getBody().getLastChild() instanceof ReturnStatement) {
-        	ReturnStatement ret = (ReturnStatement) methodDecl.getBody().getLastChild();
-        	if (ret.getExpression() == null) {
-        		methodDecl.getBody().removeChild(ret);
-        	}
-        }
-        
-        Pass1.dump(methodDecl.getBody(), "Body of " + methodDecl.toString());
-        
-//        if (typeDecl.getClassName().equals("java.lang.String")) {
-//           if (methodDecl.isInstanceConstructor()) {
-//               
-//           }
-//        }
-
-        return;
-    }
-    
+      for (int i = 0; i < types.length; i++) {
+         VariableDeclaration variableDecl = new VariableDeclaration(VariableDeclaration.LOCAL_PARAMETER);
+         variableDecl.setName(VariableDeclaration.getLocalVariableName(method, offset, 0));
+         variableDecl.setType(types[i]);
+         methodDecl.addParameter(variableDecl);
+         offset += types[i].getSize();
+      }
+      
+      if (methodDecl.getCode() == null)
+         return;
+         
+      sLog.d("Parsing %s", methodDecl);
+      Pass1 pass1 = new Pass1(jc);
+      
+      try {
+         pass1.parse(method, methodDecl);
+      } catch (Throwable ex) {
+         ASTNode node = null;
+         if (ex instanceof ParseException) {
+            node = ((ParseException) ex).getAstNode();
+         } else {
+            node = Pass1.getCurrentNode();
+         }
+         
+         if (J2JSCompiler.compiler.isFailOnError()) {
+            throw Utils.generateException(ex, methodDecl, node);
+         } else {
+            String msg = Utils.generateExceptionMessage(methodDecl, node);
+            J2JSCompiler.errorCount++;
+            sLog.e(ex, "%s", msg);
+         }
+         
+         Block body = new Block();
+         ThrowStatement throwStmt = new ThrowStatement();
+         MethodBinding binding = MethodBinding.lookup("java.lang.RuntimeException", "<init>", "(java/lang/String)V;");
+         ClassInstanceCreation cic = new ClassInstanceCreation(methodDecl, binding);
+         cic.addArgument(new StringLiteral("Unresolved decompilation problem"));
+         throwStmt.setExpression(cic);
+         body.appendChild(throwStmt);
+         methodDecl.setBody(body);
+      }
+      
+      // Remove from body last expressionless return statement.
+      if (J2JSCompiler.compiler.optimize && methodDecl.getBody().getLastChild() instanceof ReturnStatement) {
+         ReturnStatement ret = (ReturnStatement) methodDecl.getBody().getLastChild();
+         if (ret.getExpression() == null) {
+            methodDecl.getBody().removeChild(ret);
+         }
+      }
+      
+      Pass1.dump(methodDecl.getBody(), "Body of " + methodDecl.toString());
+      
+      // if (typeDecl.getClassName().equals("java.lang.String")) {
+      // if (methodDecl.isInstanceConstructor()) {
+      //
+      // }
+      // }
+      
+      return;
+   }
+   
     public ConstantPool getConstantPool() {
         return jc.getConstantPool();
     }

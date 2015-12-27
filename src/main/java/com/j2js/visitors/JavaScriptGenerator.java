@@ -18,12 +18,14 @@ import com.j2js.assembly.ProcedureUnit;
 import com.j2js.assembly.Project;
 import com.j2js.assembly.Signature;
 import com.j2js.dom.*;
+import com.veracloud.logging.LogFactory;
 import com.j2js.Utils;
 
 /**
  * @author j2js
  */
 public class JavaScriptGenerator extends Generator {
+    private static final com.veracloud.logging.Log sLog = LogFactory.get(JavaScriptGenerator.class);
 
     private final static String DEFINEMETHOD = "dM";
     private final static String DEFINESTATICMETHOD = "dSM";

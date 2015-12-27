@@ -1,741 +1,792 @@
 package com.j2js;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.PrintStream;
+import java.lang.reflect.Modifier;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
+
 import org.apache.bcel.Constants;
-//import org.apache.bcel.classfile.*;
 import org.apache.bcel.classfile.ClassFormatException;
+import org.apache.bcel.classfile.Code;
 import org.apache.bcel.classfile.CodeException;
 import org.apache.bcel.classfile.Constant;
-import org.apache.bcel.classfile.ConstantClass;
 import org.apache.bcel.classfile.ConstantCP;
+import org.apache.bcel.classfile.ConstantClass;
 import org.apache.bcel.classfile.ConstantDouble;
 import org.apache.bcel.classfile.ConstantFieldref;
-import org.apache.bcel.classfile.ConstantInteger;
 import org.apache.bcel.classfile.ConstantFloat;
+import org.apache.bcel.classfile.ConstantInteger;
 import org.apache.bcel.classfile.ConstantLong;
 import org.apache.bcel.classfile.ConstantNameAndType;
+import org.apache.bcel.classfile.ConstantPool;
 import org.apache.bcel.classfile.ConstantString;
 import org.apache.bcel.classfile.ConstantUtf8;
 import org.apache.bcel.classfile.JavaClass;
-import org.apache.bcel.classfile.Code;
 import org.apache.bcel.classfile.Method;
-import org.apache.bcel.classfile.ConstantPool;
 import org.apache.bcel.classfile.Utility;
-
 import org.apache.bcel.generic.BasicType;
 import org.apache.bcel.generic.InstructionHandle;
+import org.apache.bcel.generic.InstructionList;
 import org.apache.bcel.generic.InstructionTargeter;
 import org.apache.bcel.generic.ObjectType;
 import org.apache.bcel.generic.Type;
 import org.apache.bcel.util.ByteSequence;
 
+import com.j2js.assembly.Project;
+import com.j2js.assembly.Signature;
 import com.j2js.cfg.ControlFlowGraph;
 import com.j2js.cfg.Node;
 import com.j2js.cfg.SwitchEdge;
 import com.j2js.cfg.TryHeaderNode;
-import com.j2js.dom.*;
+import com.j2js.dom.ASTNode;
+import com.j2js.dom.ArrayAccess;
+import com.j2js.dom.ArrayCreation;
+import com.j2js.dom.ArrayInitializer;
+import com.j2js.dom.Assignment;
+import com.j2js.dom.Block;
+import com.j2js.dom.BooleanExpression;
+import com.j2js.dom.CastExpression;
+import com.j2js.dom.CatchClause;
+import com.j2js.dom.ClassInstanceCreation;
+import com.j2js.dom.ClassLiteral;
+import com.j2js.dom.ConditionalBranch;
+import com.j2js.dom.Expression;
+import com.j2js.dom.FieldAccess;
+import com.j2js.dom.FieldRead;
+import com.j2js.dom.FieldWrite;
+import com.j2js.dom.InfixExpression;
+import com.j2js.dom.InstanceofExpression;
+import com.j2js.dom.Jump;
+import com.j2js.dom.JumpSubRoutine;
+import com.j2js.dom.MethodBinding;
+import com.j2js.dom.MethodDeclaration;
+import com.j2js.dom.MethodInvocation;
+import com.j2js.dom.NoOperation;
+import com.j2js.dom.NullLiteral;
+import com.j2js.dom.NumberLiteral;
+import com.j2js.dom.PrefixExpression;
+import com.j2js.dom.PrimitiveCast;
+import com.j2js.dom.ReturnStatement;
+import com.j2js.dom.StringLiteral;
+import com.j2js.dom.SynchronizedBlock;
+import com.j2js.dom.ThisExpression;
+import com.j2js.dom.ThrowStatement;
+import com.j2js.dom.TryStatement;
+import com.j2js.dom.VariableBinding;
+import com.j2js.dom.VariableDeclaration;
 import com.j2js.visitors.SimpleGenerator;
-import com.j2js.assembly.Project;
-import com.j2js.assembly.Signature;
-
-import org.apache.bcel.generic.InstructionList;
-
-import com.j2js.J2JSCompiler;
-
-import java.io.*;
-import java.lang.reflect.Modifier;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.TreeMap;
+import com.veracloud.logging.LogFactory;
 
 public class Pass1 {
-    
-    private ConstantPool constantPool;
-
-    private ByteSequence bytes;
-    private static ASTNode currentNode;
-    
-    private ASTNodeStack stack;
-    
-    private Code code;
-    private MethodDeclaration methodDecl;
-    // The currently parsed method.
-    private Method method;
-    
-    private List<TryStatement> tryStatements = new ArrayList<TryStatement>();
-    private ControlFlowGraph graph = new ControlFlowGraph(tryStatements);
-    
-    // Not used anymore.
-    private int depth;
-    
-    private static Log logger = Log.getLogger();
-    
-    
-    /*
-     * The `WIDE' instruction is used in the byte code to allow 16-bit wide
-     * indices for local variables. This opcode may precede one of
-     * iload, fload, aload, lload, dload, istore, fstore, astore, lstore, dstore, ret or iinc. 
-     * The opcode immediately following takes an extra byte which is combined with
-     * the following byte to form a 16-bit value.
-     * In case of iinc, the default two 8 bit operants are widened to two 16 bit aperants accordingly.
-     */
-    private boolean wide = false;
-
-    public static ASTNode getCurrentNode() {
-        return currentNode;
-    }
-
-    public Pass1(JavaClass jc) {
-        constantPool = jc.getConstantPool();
-    }
-
-    private CatchClause createCatchClause(TryStatement tryStmt, ExceptionHandler handle) {
-        CatchClause cStmt = new CatchClause(handle.getHandlerPC());
-        VariableDeclaration decl = new VariableDeclaration(VariableDeclaration.LOCAL_PARAMETER);
-        decl.setName("_EX_");
-        decl.setType(handle.getCatchType(constantPool));
-        cStmt.setException(decl);
-        tryStmt.addCatchStatement(cStmt);
-        return cStmt;
-    }
-
-    private void makeTryFrames() {
-        for (int i=0; i<tryStatements.size(); i++) {
-            TryStatement tryStmt = tryStatements.get(i);
-            makeTryFrame(tryStmt);
-        }
-    }
-
-    private void makeTryFrame(TryStatement stmt) {
-        TryHeaderNode header = stmt.header;
-        
-        Node tryNode = graph.getOrCreateNode(stmt.getBeginIndex());
-        tryNode.stack = new ASTNodeStack();
-        header.setTryBody(tryNode);
-        
-        CatchClause clause = (CatchClause) stmt.getCatchStatements().getFirstChild();
-        while (clause != null) {
-            // Push implicit exception.
-            Node catchNode = graph.createNode(clause.getBeginIndex());
-            //catchNode.type = NodeType.CATCH;
-            catchNode.stack = new ASTNodeStack(new VariableBinding(clause.getException()));
-            header.addCatchNode(catchNode);
-            
-            clause = (CatchClause) clause.getNextSibling();
-        }
-    }
-    
-    private void compileCodeException() {
-        ExceptionHandlers handlers = new ExceptionHandlers(code);
-        
-        Iterator<ExceptionHandler> handleIterator = handlers.iterator();
-        
-        ExceptionHandler handle = handleIterator.hasNext()?handleIterator.next():null;
-        while (handle != null) {
-            boolean hasFinally = false;
-            int start = handle.getStartPC();
-            int end = handle.getEndPC();
-            
-            TryStatement tryStmt = new TryStatement();
-            tryStmt.header = (TryHeaderNode) graph.createNode(TryHeaderNode.class);
-            tryStmt.header.tryStmt = tryStmt;
-
-            Block tryBlock = new Block(start, end);
-            tryStmt.setTryBlock(tryBlock);
-
-            //tryStmt.setBeginIndex(start);
-
-            tryStatements.add(tryStmt);
-
-            CatchClause cStmt = null;
-            
-            // Collect all non-default handlers. The range of each handler is from the 'store'-instruction to the beginning of the next handler.
-            while (handle != null && !handle.isDefault() && handle.getStartPC()==start && handle.getEndPC()==end) {
-                if (cStmt!=null) {
-                    cStmt.setEndIndex(handle.getHandlerPC()-1);
-                }
-                cStmt = createCatchClause(tryStmt, handle);
-                handle = handleIterator.hasNext()?handleIterator.next():null;
-            } 
-            
-            int foo = -1;
-            if (handle != null && handle.isDefault() && handle.getStartPC()==start) {
-                // Collect first default handler.
-                hasFinally = true;
-                if (cStmt!=null) {
-                    cStmt.setEndIndex(handle.getHandlerPC()-1);
-                    tryStmt.setEndIndex(handle.getHandlerPC()-1);
-                    // Warning: We only set a lower bound for the end index. The correct index is set later
-                    // when the finally statement is analysed.
-                }
-                cStmt = createCatchClause(tryStmt, handle);
-                foo = handle.getHandlerPC();
-                handle = handleIterator.hasNext()?handleIterator.next():null;
+   private static final com.veracloud.logging.Log sLog = LogFactory.get(Pass1.class);
+   
+   private ConstantPool constantPool;
+   
+   private ByteSequence bytes;
+   private static ASTNode currentNode;
+   
+   private ASTNodeStack stack;
+   
+   private Code code;
+   private MethodDeclaration methodDecl;
+   // The currently parsed method.
+   private Method method;
+   
+   private List<TryStatement> tryStatements = new ArrayList<TryStatement>();
+   private ControlFlowGraph graph = new ControlFlowGraph(tryStatements);
+   
+   // Not used anymore.
+   private int depth;
+   
+   private static Log logger = Log.getLogger();
+   
+   /*
+    * The `WIDE' instruction is used in the byte code to allow 16-bit wide
+    * indices for local variables. This opcode may precede one of iload, fload,
+    * aload, lload, dload, istore, fstore, astore, lstore, dstore, ret or iinc.
+    * The opcode immediately following takes an extra byte which is combined
+    * with the following byte to form a 16-bit value. In case of iinc, the
+    * default two 8 bit operants are widened to two 16 bit aperants accordingly.
+    */
+   private boolean wide = false;
+   
+   public static ASTNode getCurrentNode() {
+      return currentNode;
+   }
+   
+   public Pass1(JavaClass jc) {
+      constantPool = jc.getConstantPool();
+   }
+   
+   private CatchClause createCatchClause(TryStatement tryStmt, ExceptionHandler handle) {
+      CatchClause cStmt = new CatchClause(handle.getHandlerPC());
+      VariableDeclaration decl = new VariableDeclaration(VariableDeclaration.LOCAL_PARAMETER);
+      decl.setName("_EX_");
+      decl.setType(handle.getCatchType(constantPool));
+      cStmt.setException(decl);
+      tryStmt.addCatchStatement(cStmt);
+      return cStmt;
+   }
+   
+   private void makeTryFrames() {
+      for (int i = 0; i < tryStatements.size(); i++) {
+         TryStatement tryStmt = tryStatements.get(i);
+         makeTryFrame(tryStmt);
+      }
+   }
+   
+   private void makeTryFrame(TryStatement stmt) {
+      TryHeaderNode header = stmt.header;
+      
+      Node tryNode = graph.getOrCreateNode(stmt.getBeginIndex());
+      tryNode.stack = new ASTNodeStack();
+      header.setTryBody(tryNode);
+      
+      CatchClause clause = (CatchClause) stmt.getCatchStatements().getFirstChild();
+      while (clause != null) {
+         // Push implicit exception.
+         Node catchNode = graph.createNode(clause.getBeginIndex());
+         // catchNode.type = NodeType.CATCH;
+         catchNode.stack = new ASTNodeStack(new VariableBinding(clause.getException()));
+         header.addCatchNode(catchNode);
+         
+         clause = (CatchClause) clause.getNextSibling();
+      }
+   }
+   
+   private void compileCodeException() {
+      ExceptionHandlers handlers = new ExceptionHandlers(code);
+      
+      Iterator<ExceptionHandler> handleIterator = handlers.iterator();
+      
+      ExceptionHandler handle = handleIterator.hasNext() ? handleIterator.next() : null;
+      while (handle != null) {
+         boolean hasFinally = false;
+         int start = handle.getStartPC();
+         int end = handle.getEndPC();
+         
+         TryStatement tryStmt = new TryStatement();
+         tryStmt.header = (TryHeaderNode) graph.createNode(TryHeaderNode.class);
+         tryStmt.header.tryStmt = tryStmt;
+         
+         Block tryBlock = new Block(start, end);
+         tryStmt.setTryBlock(tryBlock);
+         
+         // tryStmt.setBeginIndex(start);
+         
+         tryStatements.add(tryStmt);
+         
+         CatchClause cStmt = null;
+         
+         // Collect all non-default handlers. The range of each handler is from
+         // the 'store'-instruction to the beginning of the next handler.
+         while (handle != null && !handle.isDefault() && handle.getStartPC() == start && handle.getEndPC() == end) {
+            if (cStmt != null) {
+               cStmt.setEndIndex(handle.getHandlerPC() - 1);
             }
-
-            // Last catch stmt has no endIndex, yet!
+            cStmt = createCatchClause(tryStmt, handle);
+            handle = handleIterator.hasNext() ? handleIterator.next() : null;
+         }
+         
+         int foo = -1;
+         if (handle != null && handle.isDefault() && handle.getStartPC() == start) {
+            // Collect first default handler.
+            hasFinally = true;
+            if (cStmt != null) {
+               cStmt.setEndIndex(handle.getHandlerPC() - 1);
+               tryStmt.setEndIndex(handle.getHandlerPC() - 1);
+               // Warning: We only set a lower bound for the end index. The
+               // correct index is set later
+               // when the finally statement is analysed.
+            }
+            cStmt = createCatchClause(tryStmt, handle);
+            foo = handle.getHandlerPC();
+            handle = handleIterator.hasNext() ? handleIterator.next() : null;
+         }
+         
+         // Last catch stmt has no endIndex, yet!
+         
+         while (handle != null && handle.isDefault() && (handle.getHandlerPC() == foo)) {
+            // Skip all remaining default handlers.
+            throw new RuntimeException("remaining default handlers");
+            // handle = handleIterator.hasNext()?handleIterator.next():null;
+         }
+         
+         Block catches = tryStmt.getCatchStatements();
+         if (catches.getChildCount() == 0) {
+            throw new ParseException("A try clause must have at least one (possibly default) catch clause", tryStmt);
+         }
+         cStmt = (CatchClause) catches.getChildAt(0);
+         tryBlock.setEndIndex(cStmt.getBeginIndex() - 1);
+         cStmt = (CatchClause) catches.getLastChild();
+         if (cStmt.getEndIndex() == Integer.MIN_VALUE) {
+            cStmt.setEndIndex(cStmt.getBeginIndex() + 1);
+         }
+         tryStmt.setEndIndex(cStmt.getEndIndex());
+         
+         if (hasFinally) {
+            // Can't say yet where finally block is located.
+         }
+         
+         if (logger.isDebugEnabled()) {
+            dump(tryStmt, "Try");
+         }
+      }
+   }
+   
+   /**
+    * Dumps instructions and exeption table.
+    */
+   private void dumpCode() {
+      InstructionList il = new InstructionList(code.getCode());
+      InstructionHandle[] handles = il.getInstructionHandles();
+      
+      for (InstructionHandle handle : handles) {
+         System.out.println(handle.toString(true));
+         InstructionTargeter[] targeters = handle.getTargeters();
+         if (targeters != null) {
+            for (InstructionTargeter targeter : handle.getTargeters()) {
+               System.out.println("    Targeter: " + targeter.toString() + " " + targeter.getClass());
+            }
+         }
+      }
+      
+      for (CodeException ce : code.getExceptionTable()) {
+         String exceptionType;
+         if (ce.getCatchType() > 0) {
+            Constant constant = constantPool.getConstant(ce.getCatchType());
+            exceptionType = Pass1.constantToString(constant, constantPool);
+         } else {
+            exceptionType = "Default";
+         }
+         System.out.println(ce.toString() + " " + exceptionType);
+      }
+   }
+   
+   public void parse(Method theMethod, MethodDeclaration theMethodDecl) throws IOException {
+      method = theMethod;
+      methodDecl = theMethodDecl;
+      
+      code = method.getCode();
+      
+      if (logger.isDebugEnabled()) {
+         dumpCode();
+      }
+      
+      Block.TAG = 0;
+      
+      compileCodeException();
+      
+      bytes = new ByteSequence(code.getCode());
+      
+      graph.createNode(0);
+      
+      makeTryFrames();
+      
+      parseStatement();
+      
+      try {
+         Optimizer optimizer = new Optimizer(methodDecl, tempDecls);
+         optimizer.optimize();
+      } catch (Error e) {
+         J2JSCompiler.errorCount++;
+         if (logger.isDebugEnabled()) {
+            logger.debug("In Expression Optimizer:\n" + e + "\n" + Utils.stackTraceToString(e));
+         } else {
+            logger.error("In Expression Optimizer:\n " + e);
+         }
+      }
+      
+      Block block;
+      if (J2JSCompiler.compiler.reductionLevel == 0) {
+         block = graph.reduceDumb();
+      } else {
+         block = graph.reduce();
+      }
+      
+      methodDecl.setBody(block);
+      
+   }
+   
+   private boolean isProcedure(ASTNode stmt) {
+      if (stmt instanceof MethodInvocation) {
+         MethodInvocation mi = (MethodInvocation) stmt;
+         return mi.getTypeBinding().equals(Type.VOID);
+      }
+      return false;
+   }
+   
+   Node cNode;
+   Node lastCurrentNode;
+   
+   private void setCurrentNode(Node theNode) {
+      if (cNode == theNode)
+         return;
+      cNode = theNode;
+      if (cNode != null && cNode != lastCurrentNode) {
+         logger.debug("Switched to " + cNode);
+         lastCurrentNode = cNode;
+      }
+   }
+   
+   private void joinNodes(Node node) {
+      Collection<Node> nodes = node.preds();
+      Iterator iter = nodes.iterator();
+      while (iter.hasNext()) {
+         Node n = (Node) iter.next();
+         if (n.stack.size() == 0)
+            iter.remove();
+      }
+      if (nodes.size() > 0) {
+         mergeStacks(nodes, node.stack);
+      }
+   }
+   
+   /**
+    * Selects a single node as currently active node.
+    */
+   private void selectActiveNode(int pc) {
+      // Find all nodes currently active at pc.
+      List<Node> activeNodes = new ArrayList<Node>();
+      for (Node node : graph.getNodes()) {
+         if (node.getCurrentPc() == pc) {
+            activeNodes.add(node);
+         }
+      }
+      
+      if (activeNodes.size() == 0) {
+         // No active node: Create one.
+         Node node = graph.createNode(pc);
+         setCurrentNode(node);
+         return;
+      }
+      
+      if (activeNodes.size() == 1) {
+         // Return single active node.
+         Node node = activeNodes.get(0);
+         setCurrentNode(node);
+         return;
+      }
+      
+      // Multiple nodes. Select the one starting at pc.
+      
+      Node node = graph.getNode(pc);
+      if (node == null)
+         throw new RuntimeException("No node found at " + pc);
+         
+      setCurrentNode(node);
+      
+      // Add edges from all other active nodes to the selected node.
+      activeNodes.remove(node);
+      for (Node n : activeNodes) {
+         graph.addEdge(n, node);
+      }
+   }
+   
+   /**
+    * If the stack of the specified node is [s0, s1, ..., sn], then [t1=s1; ...
+    * tn=sn} is appended to its block, and the stack is replaced by [t1, t2,
+    * ..., tn].
+    */
+   private void expressionsToVariables(Node node, boolean clone) {
+      if (node.stack.size() == 0)
+         return;
+         
+      logger.debug("expressionsToVariables ...");
+      
+      for (int i = 0; i < node.stack.size(); i++) {
+         Expression expr = (Expression) node.stack.get(i);
+         
+         if (expr instanceof VariableBinding &&
+               (((VariableBinding) expr).isTemporary())) {
+            // Skip temporary variables.
+            continue;
+         }
+         
+         VariableBinding vb = methodDecl.createAnonymousVariableBinding(expr.getTypeBinding(), true);
+         logger.debug("\t" + expr + ' ' + vb.getName());
+         Assignment a = new Assignment(Assignment.Operator.ASSIGN);
+         a.setLeftHandSide(vb);
+         a.setRightHandSide(expr);
+         // a.setRange(pc, pc);
+         node.block.appendChild(a);
+         node.stack.set(i, clone ? (VariableBinding) vb.clone() : vb);
+      }
+      
+      logger.debug("... expressionsToVariables");
+   }
+   
+   /**
+    * Returns the top element of all specified stacks if identical, otherwise
+    * the type binding (which must be identical for all elements).
+    */
+   private Object stacksIdentical(Collection sources, int index) {
+      Expression expr = null;
+      Iterator iter = sources.iterator();
+      while (iter.hasNext()) {
+         Node node = (Node) iter.next();
+         Expression e = (Expression) node.stack.get(index);
+         if (expr == null) {
+            expr = e;
+         } else if (e != expr) {
+            return expr.getTypeBinding();
+         }
+      }
+      return expr;
+   }
+   
+   /**
+    * Merges all source stacks into one target stack. If a layer over all stacks
+    * contains the identical element, then this element is propagated. For
+    * example, if there are two stacks [a, b, c] and [d, b, e], we append to the
+    * source nodes {t1=a; t2=c} and {t1=d; t2=e}, and populate the specified
+    * target stack with [t1, b, t2].
+    */
+   private void mergeStacks(Collection sources, ASTNodeStack target) {
+      logger.debug("Merging ...");
+      
+      Iterator iter = sources.iterator();
+      while (iter.hasNext()) {
+         Node pred = (Node) iter.next();
+         dump(pred.stack, "Stack for " + pred);
+      }
+      
+      int stackSize = -1;
+      // String msg = "";
+      // Find the common size of all source stacks.
+      iter = sources.iterator();
+      while (iter.hasNext()) {
+         Node pred = (Node) iter.next();
+         // msg += pred + ", ";
+         if (stackSize == -1) {
+            stackSize = pred.stack.size();
+         } else if (stackSize != pred.stack.size()) {
+            dump(sources);
+            throw new RuntimeException("Stack size mismatch");
+         }
+      }
+      
+      for (int index = 0; index < stackSize; index++) {
+         Object obj = stacksIdentical(sources, index);
+         if (obj instanceof Expression) {
+            target.add((Expression) ((Expression) obj).clone());
+            logger.debug("\tIdentical: " + obj);
+         } else {
+            // Generate variable binding tempX.
+            VariableBinding vb = methodDecl.createAnonymousVariableBinding((Type) obj, true);
+            // Append binding to target stack.
+            target.add(vb);
             
-            while (handle != null && handle.isDefault() && (handle.getHandlerPC()==foo)) {
-                // Skip all remaining default handlers.
-                throw new RuntimeException("remaining default handlers");
-                //handle = handleIterator.hasNext()?handleIterator.next():null;
+            iter = sources.iterator();
+            while (iter.hasNext()) {
+               Node node = (Node) iter.next();
+               Expression expr = (Expression) node.stack.get(index);
+               // Generate assignment tempX = expr.
+               Assignment a = new Assignment(Assignment.Operator.ASSIGN);
+               a.setLeftHandSide((VariableBinding) vb.clone());
+               if (expr instanceof VariableBinding)
+                  expr = (VariableBinding) expr.clone();
+               a.setRightHandSide(expr);
+               // Append assignment to source node.
+               node.block.appendChild(a);
             }
-
-            Block catches = tryStmt.getCatchStatements();
-            if (catches.getChildCount() == 0) {
-                throw new ParseException("A try clause must have at least one (possibly default) catch clause", tryStmt);
-            }
-            cStmt = (CatchClause) catches.getChildAt(0);
-            tryBlock.setEndIndex(cStmt.getBeginIndex()-1);
-            cStmt = (CatchClause) catches.getLastChild();
-            if (cStmt.getEndIndex() == Integer.MIN_VALUE) {
-                cStmt.setEndIndex(cStmt.getBeginIndex()+1);
-            }
-            tryStmt.setEndIndex(cStmt.getEndIndex());
+            logger.debug("\t" + vb.getName());
+         }
+      }
+      logger.debug("... Merging stacks");
+   }
+   
+   public void parseStatement() throws IOException {
+      depth = 0;
+      
+      // TODO: Check that all nodes get closed and that each closed node has
+      // empty stack!
+      
+      while (bytes.available() > 0) {
+         
+         int pc = bytes.getIndex();
+         // Logger.getLogger().finer("@" + pc);
+         
+         if (cNode != null) {
+            cNode.setCurrentPc(pc);
+         }
+         
+         selectActiveNode(pc);
+         
+         if (cNode.getInitialPc() == pc) {
+            joinNodes(cNode);
+         }
+         
+         stack = cNode.stack;
+         
+         ASTNode stmt = parseInstruction();
+         // InstructionHandle handle = il.findHandle(stmt.getBeginIndex());
+         // System.out.println(">>>" + handle);
+         
+         if (stmt instanceof NoOperation)
+            continue;
             
-            if (hasFinally) {
-                // Can't say yet where finally block is located.
+         depth += stmt.getStackDelta();
+         
+         if (stmt instanceof VariableBinding) {
+            // depth = depth;
+         }
+         
+         logger.debug(" -> " + stmt + " @ "
+               + methodDecl.getLineNumberCursor().getLineNumber(stmt)
+               + ", depth:" + depth + ", delta:" + stmt.getStackDelta());
+               
+         if (stmt instanceof JumpSubRoutine) {
+            JumpSubRoutine jsr = (JumpSubRoutine) stmt;
+            cNode.block.setEndIndex(jsr.getEndIndex());
+            
+            Node finallyNode = graph.getNode(jsr.getTargetIndex());
+            
+            if (finallyNode == null) {
+               // Found finally clause.
+               finallyNode = graph.createNode(jsr.getTargetIndex());
+               // Generate dummy expression for the astore instruction of the
+               // finally block.
+               finallyNode.stack = new ASTNodeStack(new Expression());
+               
+               // finallyNode.jsrCallers.add(cNode);
+            }
+            finallyNode.jsrCallers.add(cNode);
+            if (cNode.preds().size() == 1 && finallyNode.preds().size() == 0
+                  && cNode.getPred() instanceof TryHeaderNode) {
+               // Current node must be the default handler.
+               // TODO: This only works if default handler is a single node!!
+               TryHeaderNode tryHeaderNode = (TryHeaderNode) cNode.getPred();
+               // Attach finally to its try header node.
+               tryHeaderNode.setFinallyNode(finallyNode);
             }
             
-            if (logger.isDebugEnabled()) {
-                dump(tryStmt, "Try");
-            }
-        }
-    }
-    
-    /**
-     * Dumps instructions and exeption table.
-     */
-    private void dumpCode() {
-        InstructionList il = new InstructionList(code.getCode());
-        InstructionHandle[] handles = il.getInstructionHandles();
-        
-        for (InstructionHandle handle : handles) {
-            System.out.println(handle.toString(true));
-            InstructionTargeter[] targeters = handle.getTargeters();
-            if (targeters != null) {
-                for (InstructionTargeter targeter : handle.getTargeters()) {
-                    System.out.println("    Targeter: " + targeter.toString() + " " + targeter.getClass());
-                }
-            }
-        }
-        
-        for (CodeException ce : code.getExceptionTable()) {
-            String exceptionType;
-            if (ce.getCatchType() > 0) {
-                Constant constant = constantPool.getConstant(ce.getCatchType());
-                exceptionType = Pass1.constantToString(constant, constantPool);
+         } else if (stmt instanceof ConditionalBranch) {
+            ConditionalBranch cond = (ConditionalBranch) stmt;
+            
+            if (bytes.getIndex() == cond.getTargetIndex()) {
+               // This is a conditional branch with an empty body, i.e. not a
+               // branch at all. We ignore it.
             } else {
-                exceptionType = "Default";
+               Node elseNode = graph.getOrCreateNode(bytes.getIndex());
+               
+               Node ifNode;
+               if (cond.getTargetIndex() <= pc) {
+                  Node[] nodes = graph.getOrSplitNodeAt(cNode, cond.getTargetIndex());
+                  cNode = nodes[0];
+                  ifNode = nodes[1];
+               } else {
+                  ifNode = graph.getOrCreateNode(cond.getTargetIndex());
+               }
+               
+               BooleanExpression be = new BooleanExpression(cond.getExpression());
+               
+               graph.addIfElseEdge(cNode, ifNode, elseNode, be);
+               expressionsToVariables(cNode, false);
+               cNode = null;
             }
-            System.out.println(ce.toString() + " " + exceptionType);
-        }
-    }
-    
-    public void parse(Method theMethod, MethodDeclaration theMethodDecl) throws IOException {
-        method = theMethod;
-        methodDecl = theMethodDecl;
-        
-        code = method.getCode();
-        
-        if (logger.isDebugEnabled()) {
-            dumpCode();
-        }
-        
-        Block.TAG = 0;
-        
-        compileCodeException();
-        
-        bytes = new ByteSequence(code.getCode());
-
-        graph.createNode(0);
-        
-        makeTryFrames();
-        
-        parseStatement();
-        
-        try {
-            Optimizer optimizer = new Optimizer(methodDecl, tempDecls);
-            optimizer.optimize();
-        } catch (Error e) {
-            J2JSCompiler.errorCount++;
-            if (logger.isDebugEnabled()) {
-                logger.debug("In Expression Optimizer:\n" + e + "\n" + Utils.stackTraceToString(e));
+         } else if (stmt instanceof Jump) {
+            int targetPc = ((Jump) stmt).getTargetIndex();
+            Node targetNode;
+            
+            if (targetPc <= pc) {
+               // Backward jump.
+               Node[] nodes = graph.getOrSplitNodeAt(cNode, targetPc);
+               cNode = nodes[0];
+               targetNode = nodes[1];
             } else {
-                logger.error("In Expression Optimizer:\n " + e);
+               targetNode = graph.getOrCreateNode(targetPc);
             }
-        }
-
-        Block block;
-        if (J2JSCompiler.compiler.reductionLevel == 0) {
-            block = graph.reduceDumb();
-        } else {
-            block = graph.reduce();
-        }
-        
-        methodDecl.setBody(block);
- 
-    }
-
-    private boolean isProcedure(ASTNode stmt) {
-        if (stmt instanceof MethodInvocation) {
-            MethodInvocation mi = (MethodInvocation) stmt;
-            return mi.getTypeBinding().equals(Type.VOID);
-        }
-        return false;
-    }
-
-    Node cNode;
-    Node lastCurrentNode;
-    
-    private void setCurrentNode(Node theNode) {
-        if (cNode == theNode) return;
-        cNode = theNode;
-        if (cNode != null && cNode != lastCurrentNode) {
-            logger.debug("Switched to " + cNode);
-            lastCurrentNode = cNode;
-        }
-    }
-    
-    private void joinNodes(Node node) {        
-        Collection<Node> nodes = node.preds();
-        Iterator iter = nodes.iterator();
-        while (iter.hasNext()) {
-            Node n = (Node) iter.next();
-            if (n.stack.size() == 0) iter.remove();
-        }
-        if (nodes.size() > 0) {
-            mergeStacks(nodes, node.stack);
-        }
-    }
-    
-    /**
-     * Selects a single node as currently active node.
-     */
-    private void selectActiveNode(int pc) {
-        // Find all nodes currently active at pc.
-        List<Node> activeNodes = new ArrayList<Node>();
-        for (Node node : graph.getNodes()) {
-            if (node.getCurrentPc() == pc) {
-                activeNodes.add(node);
-            }
-        }
-        
-        if (activeNodes.size() == 0) {
-            // No active node: Create one.
-            Node node = graph.createNode(pc);
-            setCurrentNode(node);
-            return;
-        }
-        
-        if (activeNodes.size() == 1) {
-            // Return single active node.
-            Node node = activeNodes.get(0);
-            setCurrentNode(node);            
-            return;
-        }
-        
-        // Multiple nodes. Select the one starting at pc. 
-        
-        Node node = graph.getNode(pc);
-        if (node ==  null) throw new RuntimeException("No node found at " + pc);
-        
-        setCurrentNode(node);
-        
-        // Add edges from all other active nodes to the selected node.
-        activeNodes.remove(node);
-        for (Node n : activeNodes) {
-            graph.addEdge(n, node);
-        }
-    }
-    
-    /**
-     * If the stack of the specified node is [s0, s1, ..., sn], then [t1=s1; ... tn=sn} is
-     * appended to its block, and the stack is replaced by [t1, t2, ..., tn].
-     */
-    private void expressionsToVariables(Node node, boolean clone) {
-        if (node.stack.size() == 0) return;
-        
-        logger.debug("expressionsToVariables ...");
-        
-        for (int i=0; i<node.stack.size(); i++) {
-            Expression expr = (Expression) node.stack.get(i);
-            
-            
-            if (expr instanceof VariableBinding && 
-                    (((VariableBinding) expr).isTemporary())) {
-                // Skip temporary variables.
-                continue;
-            }
-
-            VariableBinding vb = methodDecl.createAnonymousVariableBinding(expr.getTypeBinding(), true);
-            logger.debug("\t" + expr + ' ' + vb.getName());
-            Assignment a = new Assignment(Assignment.Operator.ASSIGN);
-            a.setLeftHandSide(vb);
-            a.setRightHandSide(expr);
-            //a.setRange(pc, pc);
-            node.block.appendChild(a);
-            node.stack.set(i, clone?(VariableBinding)vb.clone():vb);
-        }
-        
-        logger.debug("... expressionsToVariables");
-    }
-    
-    /**
-     * Returns the top element of all specified stacks if identical, otherwise the type binding (which
-     * must be identical for all elements).
-     */
-    private Object stacksIdentical(Collection sources, int index) {
-        Expression expr = null;
-        Iterator iter = sources.iterator();
-        while (iter.hasNext()) {
-            Node node = (Node) iter.next();
-            Expression e = (Expression) node.stack.get(index);
-            if (expr == null) {
-                expr = e;
-            } else if (e != expr) {
-                return expr.getTypeBinding();
-            }
-        }
-        return expr;
-    }
-    
-    /**
-     * Merges all source stacks into one target stack. If a layer over all stacks contains the identical
-     * element, then this element is propagated.
-     * For example, if there are two stacks [a, b, c] and [d, b, e], we append to the source nodes 
-     * {t1=a; t2=c} and {t1=d; t2=e}, and populate the specified target stack with [t1, b, t2]. 
-     */
-    private void mergeStacks(Collection sources, ASTNodeStack target) {
-        logger.debug("Merging ...");
-        
-        Iterator iter = sources.iterator();
-        while (iter.hasNext()) {
-            Node pred = (Node) iter.next();
-            dump(pred.stack, "Stack for " + pred);
-        }
-        
-        
-        int stackSize = -1;
-        //String msg = "";
-        // Find the common size of all source stacks.
-        iter = sources.iterator();
-        while (iter.hasNext()) {
-            Node pred = (Node) iter.next();
-            //msg += pred + ", ";
-            if (stackSize == -1) {
-                stackSize = pred.stack.size(); 
-            } else if (stackSize != pred.stack.size()){
-                dump(sources);
-                throw new RuntimeException("Stack size mismatch");
-            }
-        }
-
-        for (int index=0; index < stackSize; index++) {
-            Object obj = stacksIdentical(sources, index);
-            if (obj instanceof Expression) {
-                target.add((Expression) ((Expression) obj).clone());
-                logger.debug("\tIdentical: " + obj);
-            } else {
-                // Generate variable binding tempX.
-                VariableBinding vb = methodDecl.createAnonymousVariableBinding((Type) obj, true);
-                // Append binding to target stack.
-                target.add(vb);
-                
-                iter = sources.iterator();
-                while (iter.hasNext()) {
-                    Node node = (Node) iter.next();
-                    Expression expr = (Expression) node.stack.get(index);
-                    // Generate assignment tempX = expr.
-                    Assignment a = new Assignment(Assignment.Operator.ASSIGN);
-                    a.setLeftHandSide((VariableBinding) vb.clone());
-                    if (expr instanceof VariableBinding) expr = (VariableBinding) expr.clone();
-                    a.setRightHandSide(expr);
-                    // Append assignment to source node.
-                    node.block.appendChild(a);
-                }
-                logger.debug("\t" + vb.getName());
-            }
-        }
-        logger.debug("... Merging stacks");
-    }
-
-    public void parseStatement() throws IOException {
-        depth = 0;
-        
-        // TODO: Check that all nodes get closed and that each closed node has empty stack!
-        
-        while (bytes.available() > 0) {
-            
-            int pc = bytes.getIndex();
-            //Logger.getLogger().finer("@" + pc);
-            
-            if (cNode != null) {
-                cNode.setCurrentPc(pc);
-            }
-
-            selectActiveNode(pc);
-            
-            if (cNode.getInitialPc() == pc) {
-                joinNodes(cNode);
-            }
-            
-            stack = cNode.stack;
-            
-            ASTNode stmt = parseInstruction();
-            //InstructionHandle handle = il.findHandle(stmt.getBeginIndex());
-            //System.out.println(">>>" + handle);
-            
-            if (stmt instanceof NoOperation) continue;
-            
-            depth += stmt.getStackDelta();
-            
-            if (stmt instanceof VariableBinding) {
-                depth = depth;
-            }
-
-            logger.debug(" -> " + stmt + " @ " 
-                    + methodDecl.getLineNumberCursor().getLineNumber(stmt)
-                    + ", depth:" + depth + ", delta:" + stmt.getStackDelta());
-    
-            if (stmt instanceof JumpSubRoutine) {
-                JumpSubRoutine jsr = (JumpSubRoutine) stmt;
-                cNode.block.setEndIndex(jsr.getEndIndex());
-                
-                Node finallyNode = graph.getNode(jsr.getTargetIndex());
-                
-                if (finallyNode == null) {
-                    // Found finally clause.
-                    finallyNode = graph.createNode(jsr.getTargetIndex());
-                    // Generate dummy expression for the astore instruction of the finally block.
-                    finallyNode.stack = new ASTNodeStack(new Expression());
-
-                    //finallyNode.jsrCallers.add(cNode);
-                }
-                finallyNode.jsrCallers.add(cNode);
-                if (cNode.preds().size() == 1 && finallyNode.preds().size() == 0 && cNode.getPred() instanceof TryHeaderNode) {
-                    // Current node must be the default handler.
-                    // TODO: This only works if default handler is a single node!!
-                    TryHeaderNode tryHeaderNode = (TryHeaderNode) cNode.getPred();
-                    // Attach finally to its try header node.
-                    tryHeaderNode.setFinallyNode(finallyNode);
-                }
-                
-            } else if (stmt instanceof ConditionalBranch) {
-                ConditionalBranch cond = (ConditionalBranch) stmt;
-                
-                if (bytes.getIndex() == cond.getTargetIndex()) {
-                    // This is a conditional branch with an empty body, i.e. not a branch at all. We ignore it.
-                } else {
-                    Node elseNode = graph.getOrCreateNode(bytes.getIndex());
-                    
-                    Node ifNode;
-                    if (cond.getTargetIndex() <= pc) {
-                        Node[] nodes = graph.getOrSplitNodeAt(cNode, cond.getTargetIndex());
-                        cNode = nodes[0];
-                        ifNode = nodes[1];
-                    } else {
-                        ifNode = graph.getOrCreateNode(cond.getTargetIndex());
-                    }
-                    
-                    BooleanExpression be = new BooleanExpression(cond.getExpression());
-                    
-                    graph.addIfElseEdge(cNode, ifNode, elseNode, be);
-                    expressionsToVariables(cNode, false);
-                    cNode = null;
-                }
-            } else if (stmt instanceof Jump) {
-                int targetPc = ((Jump) stmt).getTargetIndex();
-                Node targetNode;
-
-                if (targetPc <= pc) {
-                    // Backward jump.
-                    Node[] nodes = graph.getOrSplitNodeAt(cNode, targetPc);
-                    cNode = nodes[0];
-                    targetNode = nodes[1];
-                } else {
-                    targetNode = graph.getOrCreateNode(targetPc);
-                }
-                graph.addEdge(cNode, targetNode);
-                cNode = null;
-            } else if (stmt instanceof SynchronizedBlock || isProcedure(stmt)) {
-                cNode.block.appendChild(stmt);
-            } else if (stmt instanceof Assignment) {
-              expressionsToVariables(cNode, true);
-              cNode.block.appendChild(stmt);
-            } else if (stmt instanceof ThrowStatement || stmt instanceof ReturnStatement) {
-                cNode.block.appendChild(stmt);
-                cNode.close();
-                cNode = null;
-            } else {
-                stack.push(stmt);
-            }
-        }
-        
-    }
-    
-
-    void dump(Collection nodes) {
-        if (!logger.isDebugEnabled()) return;
-        
-        Iterator iter = nodes.iterator();
-        while (iter.hasNext()) {
-            Node node = (Node) iter.next();
-            dump(node.stack, node.toString());
-        }
-    }
-    
-    public static void dump(ASTNode node, String msg) {
-        if (!logger.isDebugEnabled()) return;
-        
-        ByteArrayOutputStream ba = new ByteArrayOutputStream();
-        PrintStream out = new PrintStream(ba);
-        out.println(msg);
-        SimpleGenerator generator = new SimpleGenerator(out);
-        generator.visit(node);
-        out.close();
-        try { 
-            ba.close();
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-        logger.debug(ba.toString());
-    }
-    
-    static void dump(List list, String msg) {
-        if (!logger.isDebugEnabled()) return;
-        
-        StringBuffer sb = new StringBuffer();
-        sb.append("Begin dumping " + msg + "...\n");
-        for (int i=0; i<list.size(); i++) {
-            ASTNode node = (ASTNode) list.get(i);
-            sb.append("    " + i + ": " + node + "\n");
-        }
-        sb.append("... end of dump");
-        
-        logger.debug(sb.toString());
-    }
-    
-    private VariableBinding createVariableBinding(int slot, Type type, boolean isWrite) {
-        return methodDecl.createVariableBinding(VariableDeclaration.getLocalVariableName(method, slot, bytes.getIndex()), type, isWrite);
-    }
-    
-    private InfixExpression createInfixRightLeft(InfixExpression.Operator op, Expression right, Expression left, Type type) {
-        InfixExpression binOp = new InfixExpression(op);
-        binOp.setTypeBinding(type);
-        binOp.setOperands(left, right);
-        return binOp;
-    }
-    
-    private PrefixExpression createPrefix(PrefixExpression.Operator op, ASTNode operand, Type type) {
-        PrefixExpression pe = new PrefixExpression();
-        pe.setOperator(op);
-        pe.setTypeBinding(type);
-        pe.setOperand(operand);
-        return pe;
-    }
-    
-    private Form selectForm(InstructionType instructionType) {
-        if (instructionType.getFormCount()==1) {
-            return instructionType.getForm(0);
-        }
-        FormLoop: 
-        for (int i=0; i<instructionType.getFormCount(); i++) {
-            Form form = instructionType.getForm(i);
-            for (int j=0; j<form.getIns().length; j++) {
-                Form.Value in = form.getIns()[form.getIns().length - 1 - j];
-                if (stack.peek(j).getCategory() != in.getCategory()) continue FormLoop;
-            }
-            return form;
-        }
-        throw new RuntimeException("Could not determine correct form for " + instructionType);
-    }
-    
-    private List<VariableDeclaration> tempDecls = new ArrayList<VariableDeclaration>();
-    
-    private Expression[] duplicate(Expression e) {
-        if (e instanceof NumberLiteral || e instanceof ThisExpression || e instanceof StringLiteral) {
-            // Refered values will never change nor will they have side effects,
-            // so we do not need to create an intermediate variable.
-            return new Expression[] {e, (Expression) e.clone()};
-        }
-        
-        if (e instanceof VariableBinding && ((VariableBinding) e).isTemporary()) {
-            VariableBinding vb1 = (VariableBinding) e;
-            VariableBinding vb2 = (VariableBinding) vb1.clone();
-            return new VariableBinding[] {vb1, vb2};
-        }
-        
-        Assignment a = new Assignment(Assignment.Operator.ASSIGN);
-        a.setRange(bytes.getIndex(), bytes.getIndex());
-        VariableBinding vb1 = methodDecl.createAnonymousVariableBinding(e.getTypeBinding(), true);
-        VariableBinding vb2 = (VariableBinding) vb1.clone();
-        VariableBinding vb3 = (VariableBinding) vb1.clone();
-        tempDecls.add(vb1.getVariableDeclaration());
-        vb1.getVariableDeclaration().setParentNode(methodDecl);
-        a.setLeftHandSide(vb1);
-        a.setRightHandSide(e);
-        cNode.block.appendChild(a);
-        return new VariableBinding[] {vb2, vb3};
-    }
-    
-    /**
-     * Creates a new case group at the specified pc if it does not yet exist.
-     * 
-     * @param header the switch header
-     * @param switchEdges all currently existing switch edges
-     * @param startPc the pc at which the case group starts 
-     * @return the switch edge to the case group. 
-     */
-    private SwitchEdge getOrCreateCaseGroup(Node header, Map<Integer, SwitchEdge> switchEdges, int startPc) {
-        SwitchEdge switchEdge = switchEdges.get(startPc);
-        if (switchEdge == null) {
-            Node caseGroupNode = graph.createNode(startPc);
-            switchEdge = (SwitchEdge) graph.addEdge(header, caseGroupNode, SwitchEdge.class);
-            switchEdges.put(startPc, switchEdge);
-        }
-        
-        return switchEdge;
-    }
-
-    private int readUnsigned() throws IOException {
-        int index;
-        if (wide) {
-            index = bytes.readUnsignedShort();
-            wide = false; // Clear flag
-        } else {
-            index = bytes.readUnsignedByte();
-        }
-        return index;
-    }
-    
-    private int readSigned() throws IOException {
-        int index;
-        if (wide) {
-            index = bytes.readShort();
-            wide = false; // Clear flag
-        } else {
-            index = bytes.readByte();
-        }
-        return index;
-    }
-    
-    private void dup1() {
-        Expression[] value1 = duplicate(stack.pop());
-        stack.push(value1[0]);
-        stack.push(value1[1]);
-    }
-    
-    private void dup2() {
-        Expression[] value1 = duplicate(stack.pop());
-        Expression[] value2 = duplicate(stack.pop());
-        stack.push(value2[0]);
-        stack.push(value1[0]);
-        stack.push(value2[1]);
-        stack.push(value1[1]);
-    }
+            graph.addEdge(cNode, targetNode);
+            cNode = null;
+         } else if (stmt instanceof SynchronizedBlock || isProcedure(stmt)) {
+            cNode.block.appendChild(stmt);
+         } else if (stmt instanceof Assignment) {
+            expressionsToVariables(cNode, true);
+            cNode.block.appendChild(stmt);
+         } else if (stmt instanceof ThrowStatement || stmt instanceof ReturnStatement) {
+            cNode.block.appendChild(stmt);
+            cNode.close();
+            cNode = null;
+         } else {
+            stack.push(stmt);
+         }
+      }
+   }
+   
+   void dump(Collection nodes) {
+      if (!logger.isDebugEnabled())
+         return;
+         
+      Iterator iter = nodes.iterator();
+      while (iter.hasNext()) {
+         Node node = (Node) iter.next();
+         dump(node.stack, node.toString());
+      }
+   }
+   
+   public static void dump(ASTNode node, String msg) {
+      if (!logger.isDebugEnabled())
+         return;
+         
+      ByteArrayOutputStream ba = new ByteArrayOutputStream();
+      PrintStream out = new PrintStream(ba);
+      out.println(msg);
+      SimpleGenerator generator = new SimpleGenerator(out);
+      generator.visit(node);
+      out.close();
+      try {
+         ba.close();
+      } catch (IOException e) {
+         throw new RuntimeException(e);
+      }
+      logger.debug(ba.toString());
+   }
+   
+   static void dump(List list, String msg) {
+      if (!logger.isDebugEnabled())
+         return;
+         
+      StringBuffer sb = new StringBuffer();
+      sb.append("Begin dumping " + msg + "...\n");
+      for (int i = 0; i < list.size(); i++) {
+         ASTNode node = (ASTNode) list.get(i);
+         sb.append("    " + i + ": " + node + "\n");
+      }
+      sb.append("... end of dump");
+      
+      logger.debug(sb.toString());
+   }
+   
+   private VariableBinding createVariableBinding(int slot, Type type, boolean isWrite) {
+      return methodDecl.createVariableBinding(VariableDeclaration.getLocalVariableName(method, slot, bytes.getIndex()),
+            type, isWrite);
+   }
+   
+   private InfixExpression createInfixRightLeft(InfixExpression.Operator op, Expression right, Expression left,
+         Type type) {
+      InfixExpression binOp = new InfixExpression(op);
+      binOp.setTypeBinding(type);
+      binOp.setOperands(left, right);
+      return binOp;
+   }
+   
+   private PrefixExpression createPrefix(PrefixExpression.Operator op, ASTNode operand, Type type) {
+      PrefixExpression pe = new PrefixExpression();
+      pe.setOperator(op);
+      pe.setTypeBinding(type);
+      pe.setOperand(operand);
+      return pe;
+   }
+   
+   private Form selectForm(InstructionType instructionType) {
+      if (instructionType.getFormCount() == 1) {
+         return instructionType.getForm(0);
+      }
+      FormLoop: for (int i = 0; i < instructionType.getFormCount(); i++) {
+         Form form = instructionType.getForm(i);
+         for (int j = 0; j < form.getIns().length; j++) {
+            Form.Value in = form.getIns()[form.getIns().length - 1 - j];
+            if (stack.peek(j).getCategory() != in.getCategory())
+               continue FormLoop;
+         }
+         return form;
+      }
+      throw new RuntimeException("Could not determine correct form for " + instructionType);
+   }
+   
+   private List<VariableDeclaration> tempDecls = new ArrayList<VariableDeclaration>();
+   
+   private Expression[] duplicate(Expression e) {
+      if (e instanceof NumberLiteral || e instanceof ThisExpression || e instanceof StringLiteral) {
+         // Refered values will never change nor will they have side effects,
+         // so we do not need to create an intermediate variable.
+         return new Expression[] { e, (Expression) e.clone() };
+      }
+      
+      if (e instanceof VariableBinding && ((VariableBinding) e).isTemporary()) {
+         VariableBinding vb1 = (VariableBinding) e;
+         VariableBinding vb2 = (VariableBinding) vb1.clone();
+         return new VariableBinding[] { vb1, vb2 };
+      }
+      
+      Assignment a = new Assignment(Assignment.Operator.ASSIGN);
+      a.setRange(bytes.getIndex(), bytes.getIndex());
+      VariableBinding vb1 = methodDecl.createAnonymousVariableBinding(e.getTypeBinding(), true);
+      VariableBinding vb2 = (VariableBinding) vb1.clone();
+      VariableBinding vb3 = (VariableBinding) vb1.clone();
+      tempDecls.add(vb1.getVariableDeclaration());
+      vb1.getVariableDeclaration().setParentNode(methodDecl);
+      a.setLeftHandSide(vb1);
+      a.setRightHandSide(e);
+      cNode.block.appendChild(a);
+      return new VariableBinding[] { vb2, vb3 };
+   }
+   
+   /**
+    * Creates a new case group at the specified pc if it does not yet exist.
+    * 
+    * @param header
+    *           the switch header
+    * @param switchEdges
+    *           all currently existing switch edges
+    * @param startPc
+    *           the pc at which the case group starts
+    * @return the switch edge to the case group.
+    */
+   private SwitchEdge getOrCreateCaseGroup(Node header, Map<Integer, SwitchEdge> switchEdges, int startPc) {
+      SwitchEdge switchEdge = switchEdges.get(startPc);
+      if (switchEdge == null) {
+         Node caseGroupNode = graph.createNode(startPc);
+         switchEdge = (SwitchEdge) graph.addEdge(header, caseGroupNode, SwitchEdge.class);
+         switchEdges.put(startPc, switchEdge);
+      }
+      
+      return switchEdge;
+   }
+   
+   private int readUnsigned() throws IOException {
+      int index;
+      if (wide) {
+         index = bytes.readUnsignedShort();
+         wide = false; // Clear flag
+      } else {
+         index = bytes.readUnsignedByte();
+      }
+      return index;
+   }
+   
+   private int readSigned() throws IOException {
+      int index;
+      if (wide) {
+         index = bytes.readShort();
+         wide = false; // Clear flag
+      } else {
+         index = bytes.readByte();
+      }
+      return index;
+   }
+   
+   private void dup1() {
+      Expression[] value1 = duplicate(stack.pop());
+      stack.push(value1[0]);
+      stack.push(value1[1]);
+   }
+   
+   private void dup2() {
+      Expression[] value1 = duplicate(stack.pop());
+      Expression[] value2 = duplicate(stack.pop());
+      stack.push(value2[0]);
+      stack.push(value1[0]);
+      stack.push(value2[1]);
+      stack.push(value1[1]);
+   }
     
     private ASTNode parseInstruction() throws IOException {
         int currentIndex = bytes.getIndex();
@@ -2159,75 +2210,75 @@ public class Pass1 {
         return c;
     }
     
-    ConditionalBranch createConditional(int currentIndex, InfixExpression.Operator operator,
-            Expression rightOperand) throws IOException {
-        ConditionalBranch c = new ConditionalBranch(currentIndex + bytes.readShort());
-        Expression leftOperand = stack.pop();
-       
-        if (leftOperand.getTypeBinding()!=null && leftOperand.getTypeBinding()==Type.BOOLEAN) {
-            if (operator == InfixExpression.Operator.EQUALS && NumberLiteral.isZero(rightOperand)) {
-                c.setExpression(Optimizer.negate(leftOperand));
-            } else {
-                c.setExpression(leftOperand);
-            }
-        } else {
-            InfixExpression be = new InfixExpression(operator);
-            be.setOperands(leftOperand, rightOperand);
-            c.setExpression(be);
-        }
-
-        return c;
-    }
+   ConditionalBranch createConditional(int currentIndex, InfixExpression.Operator operator,
+         Expression rightOperand) throws IOException {
+      ConditionalBranch c = new ConditionalBranch(currentIndex + bytes.readShort());
+      Expression leftOperand = stack.pop();
+      
+      if (leftOperand.getTypeBinding() != null && leftOperand.getTypeBinding() == Type.BOOLEAN) {
+         if (operator == InfixExpression.Operator.EQUALS && NumberLiteral.isZero(rightOperand)) {
+            c.setExpression(Optimizer.negate(leftOperand));
+         } else {
+            c.setExpression(leftOperand);
+         }
+      } else {
+         InfixExpression be = new InfixExpression(operator);
+         be.setOperands(leftOperand, rightOperand);
+         c.setExpression(be);
+      }
+      
+      return c;
+   }
     
-    private String getFieldName(ConstantFieldref fieldRef) {
-        ConstantNameAndType nameAndType = (ConstantNameAndType) constantPool.getConstant(fieldRef.getNameAndTypeIndex());
-        return nameAndType.getName(constantPool);
-    }
+   private String getFieldName(ConstantFieldref fieldRef) {
+      ConstantNameAndType nameAndType = (ConstantNameAndType) constantPool.getConstant(fieldRef.getNameAndTypeIndex());
+      return nameAndType.getName(constantPool);
+   }
     
-    public static String constantToString(Constant c, ConstantPool constantPool) throws ClassFormatException {
-        String str;
-        byte tag = c.getTag();
-
-        switch (tag) {
-        case Constants.CONSTANT_Class :
-            str = Utility.compactClassName(((ConstantClass) c).getBytes(constantPool), false);
-            break;
-
-        case Constants.CONSTANT_String :
-            str = "\"" + Utils.escape(((ConstantString) c).getBytes(constantPool)) + "\"";
-            break;
-
-        case Constants.CONSTANT_Utf8 :
-            str = ((ConstantUtf8) c).getBytes();
-            break;
-        case Constants.CONSTANT_Double :
-            str = "" + ((ConstantDouble) c).getBytes();
-            break;
-        case Constants.CONSTANT_Float :
-            str = "" + ((ConstantFloat) c).getBytes();
-            break;
-        case Constants.CONSTANT_Long :
-            str = "" + ((ConstantLong) c).getBytes();
-            break;
-        case Constants.CONSTANT_Integer :
-            str = "" + ((ConstantInteger) c).getBytes();
-            break;
-
-        case Constants.CONSTANT_NameAndType :
-            str = ((ConstantNameAndType) c).getName(constantPool);
-            break;
-
-        case Constants.CONSTANT_InterfaceMethodref :
-        case Constants.CONSTANT_Methodref :
-        case Constants.CONSTANT_Fieldref :
-            str = ((ConstantCP) c).getClass(constantPool);
-            break;
-
-        default : // Never reached
-            throw new RuntimeException("Unknown constant type " + tag);
-        }
-
-        return str;
-    }
+   public static String constantToString(Constant c, ConstantPool constantPool) throws ClassFormatException {
+      String str;
+      byte tag = c.getTag();
+      
+      switch (tag) {
+      case Constants.CONSTANT_Class:
+         str = Utility.compactClassName(((ConstantClass) c).getBytes(constantPool), false);
+         break;
+         
+      case Constants.CONSTANT_String:
+         str = "\"" + Utils.escape(((ConstantString) c).getBytes(constantPool)) + "\"";
+         break;
+         
+      case Constants.CONSTANT_Utf8:
+         str = ((ConstantUtf8) c).getBytes();
+         break;
+      case Constants.CONSTANT_Double:
+         str = "" + ((ConstantDouble) c).getBytes();
+         break;
+      case Constants.CONSTANT_Float:
+         str = "" + ((ConstantFloat) c).getBytes();
+         break;
+      case Constants.CONSTANT_Long:
+         str = "" + ((ConstantLong) c).getBytes();
+         break;
+      case Constants.CONSTANT_Integer:
+         str = "" + ((ConstantInteger) c).getBytes();
+         break;
+         
+      case Constants.CONSTANT_NameAndType:
+         str = ((ConstantNameAndType) c).getName(constantPool);
+         break;
+         
+      case Constants.CONSTANT_InterfaceMethodref:
+      case Constants.CONSTANT_Methodref:
+      case Constants.CONSTANT_Fieldref:
+         str = ((ConstantCP) c).getClass(constantPool);
+         break;
+         
+      default: // Never reached
+         throw new RuntimeException("Unknown constant type " + tag);
+      }
+      
+      return str;
+   }
 
 }

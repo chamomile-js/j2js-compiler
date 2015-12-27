@@ -1,7 +1,5 @@
 package com.j2js;
 
-import com.j2js.J2JSCompiler;
-
 import java.io.File;
 import java.io.FileWriter;
 import java.io.FilenameFilter;
@@ -9,19 +7,13 @@ import java.io.IOException;
 import java.io.Writer;
 import java.util.ArrayList;
 import java.util.Collection;
-
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 import org.apache.commons.io.IOUtils;
 
-import com.j2js.FileObject;
-import com.j2js.Log;
-import com.j2js.Utils;
 import com.j2js.assembly.ClassUnit;
 import com.j2js.assembly.ConstructorUnit;
 import com.j2js.assembly.JavaScriptCompressor;
@@ -30,11 +22,13 @@ import com.j2js.assembly.MemberUnit;
 import com.j2js.assembly.ProcedureUnit;
 import com.j2js.assembly.Project;
 import com.j2js.assembly.Signature;
+import com.veracloud.logging.LogFactory;
 
 /**
  * 
  */
 public class Assembly {
+    private static final com.veracloud.logging.Log sLog = LogFactory.get(Assembly.class);
     
     public List<String> entryPoints = new ArrayList<String>();
     

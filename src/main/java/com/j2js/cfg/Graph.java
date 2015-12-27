@@ -101,39 +101,40 @@ public abstract class Graph {
         elseEdge.setNegate(true);
     }
     
-    public Edge addEdge(Node source, Node target) {
-        return addEdge(source, target, Edge.class);
-    }
+   public Edge addEdge(Node source, Node target) {
+      return addEdge(source, target, Edge.class);
+   }
+   
+   public Edge addEdge(Node source, Node target, Class<?> clazz) {
+      Edge edge = getEdge(source, target);
+      if (edge != null) {
+         // TODO: Why not allow adding multiple edges? This is possible
+         // anyway through reroot or redirect!
+         throw new RuntimeException("Edge already exists");
+      }
+      if (clazz.equals(Edge.class)) {
+         edge = new Edge(this, source, target);
+      } else if (clazz.equals(SwitchEdge.class)) {
+         edge = new SwitchEdge(this, source, target);
+      } else if (clazz.equals(ConditionalEdge.class)) {
+         edge = new ConditionalEdge(this, source, target);
+      } else {
+         throw new RuntimeException("Illegal edge class " + clazz);
+      }
+      source.addEdge(edge);
+      if (source != target) {
+         target.addEdge(edge);
+      }
+      return edge;
+   }
     
-    public Edge addEdge(Node source, Node target, Class clazz) {
-        Edge edge = getEdge(source, target);
-        if (edge != null) {
-            // TODO: Why not allow adding multiple edges? This is possible
-            // anyway through reroot or redirect!
-            throw new RuntimeException("Edge already exists");
-        }
-        if (clazz.equals(Edge.class)) {
-            edge = new Edge(this, source, target);
-        } else if (clazz.equals(SwitchEdge.class)) {
-            edge = new SwitchEdge(this, source, target);
-        } else if (clazz.equals(ConditionalEdge.class)) {
-            edge = new ConditionalEdge(this, source, target);
-        } else {
-            throw new RuntimeException("Illegal edge class " + clazz);
-        }
-        source.addEdge(edge);
-        if (source != target) {
-            target.addEdge(edge);
-        }
-        return edge;
-    }
-    
-    public Edge getEdge(Node source, Node target) {
-        for (Edge edge : source.getOutEdges()) {
-            if (edge.target == target) return edge;
-        }
-        return null;
-    }
+   public Edge getEdge(Node source, Node target) {
+      for (Edge edge : source.getOutEdges()) {
+         if (edge.target == target)
+            return edge;
+      }
+      return null;
+   }
     	
     public void removeNode(Node node) {
         replaceNode(node, null);

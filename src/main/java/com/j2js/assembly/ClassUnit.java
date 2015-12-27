@@ -20,10 +20,9 @@ import com.j2js.Log;
  * @author wolle
  */
 public class ClassUnit extends Unit {
-    
-    static final long serialVersionUID = 1;
-    
-    // Time stamp at which unit was last compiled.
+   private static final long serialVersionUID = 1225419921681632663L;
+
+   // Time stamp at which unit was last compiled.
     private long lastCompiled;
 
     /**
@@ -100,7 +99,7 @@ public class ClassUnit extends Unit {
     }
     
     private void removeInterfaces() {
-        Iterator iter = interfaces.iterator();
+        Iterator<ClassUnit> iter = interfaces.iterator();
         while (iter.hasNext()) {
             ClassUnit interfaceUnit = (ClassUnit) iter.next();
             interfaceUnit.removeSubUnit(this);
@@ -248,8 +247,7 @@ public class ClassUnit extends Unit {
     
     public FileObject getClassFile() {
         if (classFile == null) {
-            classFile = J2JSCompiler.compiler.fileManager.getFileForInput(
-                    getSignature().toString().replaceAll("\\.", "/") + ".class"); 
+            classFile = J2JSCompiler.compiler.fileManager.getFileForInput(getSignature().toString().replaceAll("\\.", "/") + ".class"); 
         }
         return classFile;
     }
