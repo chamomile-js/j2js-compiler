@@ -6,13 +6,11 @@ A Java Bytecode to JavaScript Cross-Compiler.
 
 1. You need to install this and the following projects
 
-* https://github.com/decatur/j2js-compiler
-* https://github.com/decatur/j2js-jre
-* https://github.com/decatur/j2js-agent
+* https://github.com/chamomile-js/j2js-compiler
+* https://github.com/chamomile-js/j2js-jre
+* https://github.com/chamomile-js/j2js-agent
 
 2. Build all projects. An Eclipse project description is included.
-
-3. Optionally install https://github.com/decatur/j2js-demos
 
 ##Building your project
 
@@ -81,10 +79,3 @@ The project `j2js-jre` contains a hand-crafted version of the Java Runtime Envir
 
 ##Limitations
 The cross-compiler is able to translate any legal Java Bytecode. However, naturally, the compiler cannot support the Java Native Interface (JNI).
-
-##Cross Compiling Scala
-The current Scala version uses JRE classes such as `ClassLoader` or `SecurityContext` even in base Scala classes. These JRE classes do not make sense in a web agent context and are therefore not implemented in `j2js-jre`.
-
-A workaround would be to hand-craft a subset of Scala classes, avoiding dependencies to JRE classes such as `ClassLoader`. But this is a lot of work.
-
-So, sadly, we cannot support Scala under this circumstance.
