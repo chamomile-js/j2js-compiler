@@ -1,7 +1,5 @@
 package com.j2js.visitors;
 
-import com.j2js.J2JSCompiler;
-
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.lang.reflect.Modifier;
@@ -12,14 +10,56 @@ import org.apache.bcel.Constants;
 import org.apache.bcel.generic.ObjectType;
 import org.apache.bcel.generic.Type;
 
+import com.j2js.J2JSCompiler;
 import com.j2js.Log;
+import com.j2js.Utils;
 import com.j2js.assembly.ClassUnit;
 import com.j2js.assembly.ProcedureUnit;
 import com.j2js.assembly.Project;
 import com.j2js.assembly.Signature;
-import com.j2js.dom.*;
+import com.j2js.dom.ASTNode;
+import com.j2js.dom.ArrayAccess;
+import com.j2js.dom.ArrayCreation;
+import com.j2js.dom.ArrayInitializer;
+import com.j2js.dom.Assignment;
+import com.j2js.dom.Block;
+import com.j2js.dom.BooleanLiteral;
+import com.j2js.dom.BreakStatement;
+import com.j2js.dom.CastExpression;
+import com.j2js.dom.CatchClause;
+import com.j2js.dom.ClassInstanceCreation;
+import com.j2js.dom.ClassLiteral;
+import com.j2js.dom.ConditionalExpression;
+import com.j2js.dom.ContinueStatement;
+import com.j2js.dom.DoStatement;
+import com.j2js.dom.Expression;
+import com.j2js.dom.FieldAccess;
+import com.j2js.dom.FieldRead;
+import com.j2js.dom.IfStatement;
+import com.j2js.dom.InfixExpression;
+import com.j2js.dom.InstanceofExpression;
+import com.j2js.dom.MethodBinding;
+import com.j2js.dom.MethodDeclaration;
+import com.j2js.dom.MethodInvocation;
+import com.j2js.dom.Name;
+import com.j2js.dom.NullLiteral;
+import com.j2js.dom.NumberLiteral;
+import com.j2js.dom.PostfixExpression;
+import com.j2js.dom.PrefixExpression;
+import com.j2js.dom.PrimitiveCast;
+import com.j2js.dom.ReturnStatement;
+import com.j2js.dom.StringLiteral;
+import com.j2js.dom.SwitchCase;
+import com.j2js.dom.SwitchStatement;
+import com.j2js.dom.SynchronizedBlock;
+import com.j2js.dom.ThisExpression;
+import com.j2js.dom.ThrowStatement;
+import com.j2js.dom.TryStatement;
+import com.j2js.dom.TypeDeclaration;
+import com.j2js.dom.VariableBinding;
+import com.j2js.dom.VariableDeclaration;
+import com.j2js.dom.WhileStatement;
 import com.veracloud.logging.LogFactory;
-import com.j2js.Utils;
 
 /**
  * @author j2js
@@ -71,57 +111,58 @@ public class JavaScriptGenerator extends Generator {
     /**
      * This method must be called first because it sets the global className.
      */
-    public void visit(TypeDeclaration theTypeDecl) {
-        //Logger logger = Logger.getLogger();
-        //logger.info("Generating JavaScript for " + typeDecl);
-        lastChar = '\0';
-        currentNode = null;
-        depth = 0;
-        
-        typeDecl = theTypeDecl;
-        isFinal = Modifier.isFinal(theTypeDecl.getAccess());
-        
-        println("var _C = function() {");
-        depth++;
-        
-        List fields = theTypeDecl.getFields();
-		for (int i=0; i<fields.size(); i++) {
-			VariableDeclaration decl = (VariableDeclaration) fields.get(i);
-			// Do not generate static field declaration.
-			if (Modifier.isStatic(decl.getModifiers())) continue;
-			indent();
-			decl.visit(this);
-			println(";");
-		}
+   public void visit(TypeDeclaration theTypeDecl) {
+      sLog.i("Generating JavaScript for %s", typeDecl);
+      
+      lastChar = '\0';
+      currentNode = null;
+      depth = 0;
+      
+      typeDecl = theTypeDecl;
+      isFinal = Modifier.isFinal(theTypeDecl.getAccess());
+      
+      println("var _C = function() {");
+      depth++;
+      
+      List<VariableDeclaration> fields = theTypeDecl.getFields();
+      for (VariableDeclaration decl : fields) {
+         // Do not generate static field declaration.
+         if (Modifier.isStatic(decl.getModifiers()))
+            continue;
+         indent();
+         decl.visit(this);
+         println(";");
+      }
         
 		depth--;
 		println("}");
 
-        String superType = null;
-        // TODO Interface: Interfaces must not have supertype.
-        if (theTypeDecl.getSuperType() != null && !Modifier.isInterface(theTypeDecl.getAccess())) {
-            superType = Project.getSingleton().getSignature(theTypeDecl.getSuperType().getClassName()).getCommentedId();
-        }
-        
-        print("var _T = j2js.");
-        print(DEFINECLASS);
-        print("(");
-        print(Project.getSingleton().getSignature(theTypeDecl.getClassName()).getCommentedId());
-        println(", _C, " + superType + ");");
-        
-	    // Generate static initializer.
-	    println("{");
-	    
-	    depth++;
-		for (int i=0; i<fields.size(); i++) {
-			VariableDeclaration decl = (VariableDeclaration) fields.get(i);
-			// Only generate static field declaration.
-			if (!Modifier.isStatic(decl.getModifiers())) continue;
-			indent();
-			decl.visit(this);
-			println(";");
-
-		}
+      String superType = null;
+      // TODO Interface: Interfaces must not have supertype.
+      if (theTypeDecl.getSuperType() != null && !Modifier.isInterface(theTypeDecl.getAccess())) {
+         superType = Project.getSingleton().getSignature(theTypeDecl.getSuperType().getClassName()).getCommentedId();
+      }
+      
+      print("var _T = j2js.");
+      print(DEFINECLASS);
+      print("(");
+      print(Project.getSingleton().getSignature(theTypeDecl.getClassName()).getCommentedId());
+      println(", _C, " + superType + ");");
+      
+      // Generate static initializer.
+      println("{");
+      
+      depth++;
+      for (int i = 0; i < fields.size(); i++) {
+         VariableDeclaration decl = (VariableDeclaration) fields.get(i);
+         // Only generate static field declaration.
+         if (!Modifier.isStatic(decl.getModifiers()))
+            continue;
+         indent();
+         decl.visit(this);
+         println(";");
+         
+      }
 
 //		if (typeDecl.getInitializer() != null) {
 //		    Block body = type.getInitializer().getBody();
@@ -131,26 +172,23 @@ public class JavaScriptGenerator extends Generator {
 //			visit_(body);
 //		}
 		
-		depth--;
-		println("}");
-
-        ClassUnit classUnit = project.getClassUnit(theTypeDecl.getType());
-        classUnit.setData(reset());
-        
-        
-        MethodDeclaration[] methods = theTypeDecl.getMethods();
-        
-        for (int i=0; i<methods.length; i++) {
-            MethodDeclaration method =methods[i];
-            currentMethodDeclaration = method;
-            try {
-                method.visit(this);
-            } catch (RuntimeException ex) {
-                throw Utils.generateException(ex, method, currentNode);
-            }
-        }
-        
-    }
+      depth--;
+      println("}");
+      
+      ClassUnit classUnit = project.getClassUnit(theTypeDecl.getType());
+      classUnit.setData(reset());
+      
+      MethodDeclaration[] methods = theTypeDecl.getMethods();
+      
+      for (MethodDeclaration method : methods) {
+         currentMethodDeclaration = method;
+         try {
+            method.visit(this);
+         } catch (RuntimeException ex) {
+            throw Utils.generateException(ex, method, currentNode);
+         }
+      }  
+   }
     
     /**
      */
@@ -536,6 +574,7 @@ public class JavaScriptGenerator extends Generator {
     }
     
 
+    //formatter:off
 	/*
 	 We have to substitute each setter and getter method by the appropriate field access.
 	 According the first 3 characters and the number of arguments of the method (set*(arg) for setter, get*() for getter),
@@ -545,29 +584,35 @@ public class JavaScriptGenerator extends Generator {
 	     Element.setAttributeNode(arg)
 	     Element.setAttributeNodeNS(arg)
 	 */
-    private boolean isW3C(MethodInvocation invocation) {
-        MethodBinding methodBinding = invocation.getMethodBinding();
-        
-        String name = methodBinding.getName();
-        int argCount = invocation.getArguments().size();
-    	boolean isSetter = name.startsWith("set") && argCount==1;
-    	boolean isGetter = name.startsWith("get") && argCount==0;
-    	
-        if (!isSetter && !isGetter) return false;
-    	
-        if (methodBinding.equals("org.w3c.dom5.NamedNodeMap")) {
-            if (name.equals("setNamedItemNS") || name.equals("setNamedItem")) return false;
-        }
-    	if (methodBinding.equals("org.w3c.dom5.Element")) {
-            if (name.equals("setAttributeNode") || name.equals("setAttributeNodeNS")) return false;
-        }
-        // TODO: Also check class name.
-        if (name.equals("getContentDocument")) return false;
-        if (name.equals("getButton")) return false;
-        
-        return true;
-
-	}
+    //formatter:on
+   private boolean isW3C(MethodInvocation invocation) {
+      MethodBinding methodBinding = invocation.getMethodBinding();
+      
+      String name = methodBinding.getName();
+      int argCount = invocation.getArguments().size();
+      boolean isSetter = name.startsWith("set") && argCount == 1;
+      boolean isGetter = name.startsWith("get") && argCount == 0;
+      
+      if (!isSetter && !isGetter)
+         return false;
+         
+      if (methodBinding.equals("j2js.w3c.dom.NamedNodeMap")) {
+         if (name.equals("setNamedItemNS") || name.equals("setNamedItem"))
+            return false;
+      }
+      if (methodBinding.equals("j2js.w3c.dom.Element")) {
+         if (name.equals("setAttributeNode") || name.equals("setAttributeNodeNS"))
+            return false;
+      }
+      // TODO: Also check class name.
+      if (name.equals("getContentDocument"))
+         return false;
+      if (name.equals("getButton"))
+         return false;
+         
+      return true;
+      
+   }
     
     private void generateScriptCode(MethodInvocation invocation) {
         MethodBinding methodBinding = invocation.getMethodBinding();
@@ -650,7 +695,28 @@ public class JavaScriptGenerator extends Generator {
             return;
         }
 
-        if ( className.startsWith("org.w3c.dom5.") && !className.equals("org.w3c.dom5.views.Window") ) {
+        if ( className.startsWith("j2js.w3c.dom.")/* && !className.equals("j2js.w3c.dom.views.Window") */) {
+           
+            if (name.equals("setInterval")) {
+               // Example: createTimerDelegate(this, listener, delayInMillis, 'Interval');
+               print(prefix + "createTimerDelegate(");
+               expression.visit(this);
+               print(", ");
+               generateList(invocation.getArguments());
+               print(", 'Interval')");
+               return;
+            }
+            
+            if (name.equals("setTimeout")) {
+               // Example: createTimerDelegate(this, listener, delayInMillis, 'Timeout');
+               print(prefix + "createTimerDelegate(");
+               expression.visit(this);
+               print(", ");
+               generateList(invocation.getArguments());
+               print(", 'Timeout')");
+               return;
+            }
+           
             if (name.equals("addEventListener")) {
                 // Example: createDelegate(tr, "click", listener, false);
                 print(prefix + "createDelegate(");
@@ -673,7 +739,7 @@ public class JavaScriptGenerator extends Generator {
             
             if (name.equals("setProperty")) {
                 expression.visit(this);
-                List args = invocation.getArguments();
+                List<?> args = invocation.getArguments();
                 
                 ASTNode property = (ASTNode) args.get(0); 
                 if (property instanceof StringLiteral) {
@@ -691,7 +757,7 @@ public class JavaScriptGenerator extends Generator {
             
             if (name.equals("getPropertyValue")) {
                 expression.visit(this);
-                List args = invocation.getArguments();
+                List<?> args = invocation.getArguments();
                 print(".");
                 ASTNode property = (ASTNode) args.get(0); 
                 if (property instanceof StringLiteral) {
@@ -708,7 +774,7 @@ public class JavaScriptGenerator extends Generator {
                 String property = name.substring(3);
                 property = property.substring(0, 1).toLowerCase() + property.substring(1);
                 
-                //if (methodBinding.equals("org.w3c.dom.html.HTMLFrameElement") && property.equals("contentDocument"))
+                //if (methodBinding.equals("j2js.w3c.dom.html.HTMLFrameElement") && property.equals("contentDocument"))
                 //  property = "document";
                 
                 if (name.startsWith("get")) {
@@ -821,55 +887,56 @@ public class JavaScriptGenerator extends Generator {
     	print("]");
     }
     
-    private String normalizeAccess(String name) {
-        if (!name.matches("\\w*")) {
-            // Name contains non-word characters, for example generated by AspectJ.
-            return "[\"" + name + "\"]";
-        }
-        return "." + name;
-    }
+   private String normalizeAccess(String name) {
+      if (!name.matches("\\w*")) {
+         // Name contains non-word characters, for example generated by AspectJ.
+         return "[\"" + name + "\"]";
+      }
+      return "." + name;
+   }
     
-    public void visit(VariableDeclaration decl) {
-    	if (decl.getLocation() == VariableDeclaration.LOCAL_PARAMETER) {
-            print(decl.getName());
-            return;
-    	}
-    	
-        if (decl.getLocation() == VariableDeclaration.NON_LOCAL) {
-        	if (Modifier.isStatic(decl.getModifiers())) {
-                print("_T.constr.prototype");
-        	} else {
-        		print("this");
-        	}
-            print(normalizeAccess(decl.getName()));
-        } else {
-            if (decl.getLocation() != VariableDeclaration.LOCAL)
-                throw new RuntimeException("Declaration must be local");
-        	print("var " + decl.getName());
-        }
-
-        if (!decl.isInitialized()) return;
-        
-        print(" = ");
-        
-        switch (decl.getType().getType()) {
-			case Constants.T_INT:
-			case Constants.T_SHORT:
-			case Constants.T_BYTE:
-			case Constants.T_LONG:
-			case Constants.T_DOUBLE:
-			case Constants.T_FLOAT:
-			case Constants.T_CHAR: 
-			    print("0");
-				break;
-			case Constants.T_BOOLEAN: 
-			    print("false");
-				break;
-			default:
-			    print("null");
-			break;
-		}
-    }
+   public void visit(VariableDeclaration decl) {
+      if (decl.getLocation() == VariableDeclaration.LOCAL_PARAMETER) {
+         print(decl.getName());
+         return;
+      }
+      
+      if (decl.getLocation() == VariableDeclaration.NON_LOCAL) {
+         if (Modifier.isStatic(decl.getModifiers())) {
+            print("_T.constr.prototype");
+         } else {
+            print("this");
+         }
+         print(normalizeAccess(decl.getName()));
+      } else {
+         if (decl.getLocation() != VariableDeclaration.LOCAL)
+            throw new RuntimeException("Declaration must be local");
+         print("var " + decl.getName());
+      }
+      
+      if (!decl.isInitialized())
+         return;
+         
+      print(" = ");
+      
+      switch (decl.getType().getType()) {
+      case Constants.T_INT:
+      case Constants.T_SHORT:
+      case Constants.T_BYTE:
+      case Constants.T_LONG:
+      case Constants.T_DOUBLE:
+      case Constants.T_FLOAT:
+      case Constants.T_CHAR:
+         print("0");
+         break;
+      case Constants.T_BOOLEAN:
+         print("false");
+         break;
+      default:
+         print("null");
+         break;
+      }
+   }
     
     public void visit(VariableBinding reference) {
 //        if (!reference.isField()) {

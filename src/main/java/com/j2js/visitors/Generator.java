@@ -44,19 +44,20 @@ public abstract class Generator extends AbstractVisitor {
         stream.flush();
     }
 
-    void indent() {
-        // No indentation if compression is on.
-        if (J2JSCompiler.compiler.isCompression()) return;
-        String INDENT = "\t";
-        if (indents == null || depth >= indents.length) {
-            indents = new String[2 * depth];
-            indents[0] = "";
-            for (int i=1; i<indents.length; i++) {
-                indents[i] = indents[i-1] + INDENT;
-            }
-        }
-        print(indents[depth]);
-    }
+   void indent() {
+      // No indentation if compression is on.
+      if (J2JSCompiler.compiler.isCompression())
+         return;
+      String INDENT = "\t";
+      if (indents == null || depth >= indents.length) {
+         indents = new String[2 * depth];
+         indents[0] = "";
+         for (int i = 1; i < indents.length; i++) {
+            indents[i] = indents[i - 1] + INDENT;
+         }
+      }
+      print(indents[depth]);
+   }
     
     void print(String s) {
         stream.print(s);
