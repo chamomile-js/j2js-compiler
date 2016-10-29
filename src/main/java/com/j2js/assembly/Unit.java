@@ -6,57 +6,58 @@ import java.io.Writer;
 
 import com.j2js.Log;
 
-
 public abstract class Unit implements Serializable {
-    
-    private Signature signature;
+  private static final long serialVersionUID = -3549097576011536835L;
 
-    private String data;
+  private Signature signature;
 
-    private transient boolean isTainted = false;
-    private static transient String[] indentPerDepth = new String[10];
+  private String data;
 
-    public Unit() {
-    }
-    
-    abstract void write(int depth, Writer writer) throws IOException;
-    
-    String getIndent(int depth) {
-        String indent = indentPerDepth[depth];
-        if (indent == null) {
-            indent = "";
-            for (int i=0; i<depth; i++) indent += '\t';
-        }
-        return indent;
-    }
-    
-    public String toString() {
-        return signature.toString();
-    }
+  private transient boolean isTainted = false;
+  private static transient String[] indentPerDepth = new String[10];
 
-    public Signature getSignature() {
-        return signature;
-    }
+  public Unit() {}
 
-    void setSignature(Signature theSignature) {
-        signature = theSignature;
-    }
+  abstract void write(int depth, Writer writer) throws IOException;
 
-    public String getData() {
-        return data;
+  String getIndent(int depth) {
+    String indent = indentPerDepth[depth];
+    if (indent == null) {
+      indent = "";
+      for (int i = 0; i < depth; i++)
+        indent += '\t';
     }
+    return indent;
+  }
 
-    public void setData(String theData) {
-        data = theData;
-    }
+  public String toString() {
+    return signature.toString();
+  }
 
-    public boolean isTainted() {
-        return isTainted;
-    }
+  public Signature getSignature() {
+    return signature;
+  }
 
-    public void setTainted() {
-        if (!isTainted) Log.getLogger().debug("Taint " + this);
-        isTainted = true;
-    }
+  void setSignature(Signature theSignature) {
+    signature = theSignature;
+  }
+
+  public String getData() {
+    return data;
+  }
+
+  public void setData(String theData) {
+    data = theData;
+  }
+
+  public boolean isTainted() {
+    return isTainted;
+  }
+
+  public void setTainted() {
+    if (!isTainted)
+      Log.getLogger().debug("Taint " + this);
+    isTainted = true;
+  }
 
 }

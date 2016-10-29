@@ -22,42 +22,40 @@ import com.j2js.assembly.MemberUnit;
 import com.j2js.assembly.ProcedureUnit;
 import com.j2js.assembly.Project;
 import com.j2js.assembly.Signature;
-import com.veracloud.logging.LogFactory;
 
 /**
  * 
  */
 public class Assembly {
-    private static final com.veracloud.logging.Log sLog = LogFactory.get(Assembly.class);
     
-    public List<String> entryPoints = new ArrayList<String>();
-    
-    private final static String DECLARECLASS = "dcC";
-    
-    private transient Log logger;
+  public List<String> entryPoints = new ArrayList<String>();
 
-    private transient String entryPointClassName;
- 
-    private Project project;
-    private Set<Signature> taintedSignatures = new HashSet<Signature>();
-    private Set<Signature> unprocessedTaintedSignatures = new HashSet<Signature>();
-    String[] patterns;
-    private Collection<ClassUnit> resolvedTypes = new ArrayList<ClassUnit>();
-    private transient File targetLocation;
+  private final static String DECLARECLASS = "dcC";
 
-    public Assembly() {
-        patterns = Utils.getProperty("j2js.taintIfInstantiated").split(";");
-        for (int i=0; i<patterns.length; i++) {
-            // Remove all whitespace, quote '.', '(', ')', and transform
-            // '*' to '.*'.
-            String pattern = patterns[i].replaceAll("\\s", "");
-            pattern = pattern.replaceAll("\\.", "\\\\.");
-            pattern = pattern.replaceAll("\\*", ".*");
-            pattern = pattern.replaceAll("\\(", "\\\\(");
-            pattern = pattern.replaceAll("\\)", "\\\\)");
-            patterns[i] = pattern;
-        }
+  private transient Log logger;
+
+  private transient String entryPointClassName;
+
+  private Project project;
+  private Set<Signature> taintedSignatures = new HashSet<Signature>();
+  private Set<Signature> unprocessedTaintedSignatures = new HashSet<Signature>();
+  String[] patterns;
+  private Collection<ClassUnit> resolvedTypes = new ArrayList<ClassUnit>();
+  private transient File targetLocation;
+
+  public Assembly() {
+    patterns = Utils.getProperty("j2js.taintIfInstantiated").split(";");
+    for (int i = 0; i < patterns.length; i++) {
+      // Remove all whitespace, quote '.', '(', ')', and transform '*' to '.*'.
+      String pattern = patterns[i].replaceAll("\\s", "");
+      pattern = pattern.replaceAll("\\.", "\\\\.");
+      pattern = pattern.replaceAll("\\*", ".*");
+      pattern = pattern.replaceAll("\\(", "\\\\(");
+      pattern = pattern.replaceAll("\\)", "\\\\)");
+      System.out.println(pattern);
+      patterns[i] = pattern;
     }
+  }
     
     /**
      * Pipes a file on the class path into a stream.
@@ -240,20 +238,20 @@ public class Assembly {
 //        }
     }
     
-    private ClassUnit resolve(String className) {
-        ClassUnit clazz = project.getOrCreateClassUnit(className);
-        
-        if (className.startsWith("[")) {
-            project.resolve(clazz);
-        } else {
-            project.resolve(clazz);
-            taint(className + "#<clinit>()void");
-        }
-        
-        resolvedTypes.add(clazz);
-        
-        return clazz;
+  private ClassUnit resolve(String className) {
+    ClassUnit clazz = project.getOrCreateClassUnit(className);
+
+    if (className.startsWith("[")) {
+      project.resolve(clazz);
+    } else {
+      project.resolve(clazz);
+      taint(className + "#<clinit>()void");
     }
+
+    resolvedTypes.add(clazz);
+
+    return clazz;
+  }
     
     /**
      * Taint the signatures of methods matching a pattern.
@@ -304,8 +302,9 @@ public class Assembly {
         }
     }
     
-    public void taint(String signature) {
-        signature = signature.replaceAll("\\s", "");
+  public void taint(String signature) {
+    signature = signature.replaceAll("\\s", "");
+//@formatter:off
 //        if (signature.indexOf('*') != -1) {
 //            if (!signature.endsWith(".*")) {
 //                throw new RuntimeException("Package signature must end with '.*'");
@@ -319,17 +318,20 @@ public class Assembly {
 //                }
 //            }
 //        } else {
-            Signature s = Project.getSingleton().getSignature(signature);
-            if (s.isClass()) {
-                ClassUnit clazz = resolve(s.className());
-                for (MemberUnit member : clazz.getDeclaredMembers()) {
-                    taint(member.getAbsoluteSignature());
-                }
-            } else {
-                taint(s);
-            }
-//        }
+//@formatter:on
+    Signature s = Project.getSingleton().getSignature(signature);
+    if (s.isClass()) {
+      ClassUnit clazz = resolve(s.className());
+      for (MemberUnit member : clazz.getDeclaredMembers()) {
+        taint(member.getAbsoluteSignature());
+      }
+    } else {
+      taint(s);
     }
+//@formatter:off
+//        }
+//@formatter:on
+  }
     
     private Signature popSignature() {
         Iterator<Signature> iter = unprocessedTaintedSignatures.iterator();
@@ -338,16 +340,17 @@ public class Assembly {
         return signature;
     }
     
-    public void taint(Signature signature) {
-        if (!signature.toString().contains("#")) {
-            throw new IllegalArgumentException("Signature must be field or method: " + signature);
-        }
-        
-        if (taintedSignatures.contains(signature)) return;
-        
-        taintedSignatures.add(signature);
-        unprocessedTaintedSignatures.add(signature);
+  public void taint(Signature signature) {
+    if (!signature.toString().contains("#")) {
+      throw new IllegalArgumentException("Signature must be field or method: " + signature);
     }
+
+    if (taintedSignatures.contains(signature))
+      return;
+
+    taintedSignatures.add(signature);
+    unprocessedTaintedSignatures.add(signature);
+  }
     
     public void taint(MemberUnit member) {
         member.setTainted();
@@ -362,68 +365,71 @@ public class Assembly {
         }
     }
     
-    /**
-     * @see #getProject()
-     */
-    public void setProject(Project project) {
-        this.project = project;
-    }
-    
-    public Project getProject() {
-        return project;
-    }
+  /**
+   * @see #getProject()
+   */
+  public void setProject(Project project) {
+    this.project = project;
+  }
 
-    /**
-     * @return Returns the entryPointClassName.
-     */
-    public String getEntryPointClassName() {
-        return entryPointClassName;
-    }
+  public Project getProject() {
+    return project;
+  }
 
-    /**
-     * <p>
-     * The static <code>main(String[])void</code> method of the specified class is executed
-     * after the assembly is loaded by the script engine.
-     * </p>
-     * <p>
-     * In web mode, the values of the URL query string are passed to this method. 
-     * </p>
-     * 
-     * @param entryPointClassName (required) the class signature
-     */
-    public Assembly setEntryPointClassName(String entryPointClassName) {
-        this.entryPointClassName = entryPointClassName;
-        return this;
-    }
+  /**
+   * @return Returns the entryPointClassName.
+   */
+  public String getEntryPointClassName() {
+    return entryPointClassName;
+  }
 
-    /**
-     * @return Returns the targetLocation.
-     */
-    public File getTargetLocation() {
-        return targetLocation;
-    }
+  /**
+   * <p>
+   * The static <code>main(String[])void</code> method of the specified class is
+   * executed after the assembly is loaded by the script engine.
+   * </p>
+   * <p>
+   * In web mode, the values of the URL query string are passed to this method.
+   * </p>
+   * 
+   * @param entryPointClassName
+   *          (required) the class signature
+   */
+  public Assembly setEntryPointClassName(String entryPointClassName) {
+    this.entryPointClassName = entryPointClassName;
+    return this;
+  }
 
-    /**
-     * The assembly is written to the specified directory
-     * 
-     * @param targetLocation (required) the directory the assembly is written to
-     */
-    public void setTargetLocation(File targetLocation) {
-        this.targetLocation = targetLocation;
-    }
-    
-    /**
-     * Signature of a field or method to include in the assembly.
-     * <p>
-     * <strong>Note</strong>: Normally you will only add those entrypoints which
-     * the static code analyser cannot detect, for example methods called through
-     * reflection.
-     * </p>
-     * 
-     * @param memberSignature the member to include
-     */
-    public void addEntryPoint(String memberSignature) {
-        entryPoints.add(memberSignature);
-    }
+  /**
+   * @return Returns the targetLocation.
+   */
+  public File getTargetLocation() {
+    return targetLocation;
+  }
+
+  /**
+   * The assembly is written to the specified directory
+   * 
+   * @param targetLocation
+   *          (required) the directory the assembly is written to
+   */
+  public void setTargetLocation(File targetLocation) {
+    this.targetLocation = targetLocation;
+  }
+
+  /**
+   * Signature of a field or method to include in the assembly.
+   * <p>
+   * <strong>Note</strong>: Normally you will only add those entrypoints which
+   * the static code analyser cannot detect, for example methods called through
+   * reflection.
+   * </p>
+   * 
+   * @param memberSignature
+   *          the member to include
+   */
+  public void addEntryPoint(String memberSignature) {
+    entryPoints.add(memberSignature);
+  }
 
 }

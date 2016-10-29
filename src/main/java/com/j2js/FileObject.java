@@ -15,40 +15,39 @@ import java.util.jar.JarFile;
  * @author wolle
  */
 public class FileObject {
-   
-   private long lastModified;
-   private InputStream in;
-   
-   FileObject(JarFile jarFile, JarEntry entry) {
-      try {
-         in = jarFile.getInputStream(entry);
-      } catch (IOException e) {
-         throw new RuntimeException(e);
-      }
-      lastModified = entry.getTime();
-   }
-   
-   FileObject(File file) {
-      try {
-         in = new FileInputStream(file);
-      } catch (FileNotFoundException e) {
-         throw new RuntimeException(e);
-      }
-      lastModified = file.lastModified();
-   }
-   
-   /**
-    * Gets an InputStream for this file object.
-    */
-   public InputStream openInputStream() throws IOException {
-      return in;
-   }
-   
-   /**
-    * @return Returns the lastModified.
-    */
-   public long getLastModified() {
-      return lastModified;
-   }
-   
+  private long lastModified;
+  private InputStream in;
+
+  FileObject(JarFile jarFile, JarEntry entry) {
+    try {
+      in = jarFile.getInputStream(entry);
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+    lastModified = entry.getTime();
+  }
+
+  FileObject(File file) {
+    try {
+      in = new FileInputStream(file);
+    } catch (FileNotFoundException e) {
+      throw new RuntimeException(e);
+    }
+    lastModified = file.lastModified();
+  }
+
+  /**
+   * Gets an InputStream for this file object.
+   */
+  public InputStream openInputStream() throws IOException {
+    return in;
+  }
+
+  /**
+   * @return Returns the lastModified.
+   */
+  public long getLastModified() {
+    return lastModified;
+  }
+
 }

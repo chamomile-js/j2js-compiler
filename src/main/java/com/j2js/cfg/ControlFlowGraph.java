@@ -299,6 +299,7 @@ public class ControlFlowGraph extends Graph {
       }
    }
    
+   // -------------------------------------------------------------
    public Block reduce() {
       processTrys();
       processTrys2();

@@ -4,9 +4,9 @@
 	<classpathentry kind="src" path="src/main/java"/>
 	<classpathentry exported="true" kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
 	<classpathentry kind="con" path="org.eclipse.jdt.junit.JUNIT_CONTAINER/4"/>
-	<classpathentry kind="lib" path="libs/bcel-5.2.jar"/>
 	<classpathentry kind="lib" path="libs/commons-io-2.4.jar"/>
 	<classpathentry kind="lib" path="libs/jakarta-regexp-1.4.jar"/>
 	<classpathentry kind="lib" path="libs/jdk14-log-1.0.1.jar"/>
+	<classpathentry kind="lib" path="libs/bcel-5.2.jar"/>
 	<classpathentry kind="output" path="target/classes"/>
 </classpath>
