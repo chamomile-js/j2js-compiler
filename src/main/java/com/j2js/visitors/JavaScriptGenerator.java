@@ -77,6 +77,8 @@ public class JavaScriptGenerator extends Generator {
 	private final static String NEWINSTANCE = "nI";
 	private final static String STATICFIELDREF = "sFR";
 	private final static String prefix = "_.";
+	
+	private static final String ORG_W3C_DOM_PREFIX = "org.w3c.dom.";
 
 	private boolean isFinal;
 
@@ -600,11 +602,11 @@ public class JavaScriptGenerator extends Generator {
 		if (!isSetter && !isGetter)
 			return false;
 
-		if (methodBinding.equals("j2js.w3c.dom.NamedNodeMap")) {
+		if (methodBinding.equals(ORG_W3C_DOM_PREFIX+"NamedNodeMap")) {
 			if (name.equals("setNamedItemNS") || name.equals("setNamedItem"))
 				return false;
 		}
-		if (methodBinding.equals("j2js.w3c.dom.Element")) {
+		if (methodBinding.equals(ORG_W3C_DOM_PREFIX+"Element")) {
 			if (name.equals("setAttributeNode") || name.equals("setAttributeNodeNS"))
 				return false;
 		}
@@ -701,9 +703,9 @@ public class JavaScriptGenerator extends Generator {
 			return;
 		}
 
-		if (className.startsWith("j2js.w3c.dom.")/*
+		if (className.startsWith(ORG_W3C_DOM_PREFIX)/*
 													 * && !className.equals(
-													 * "j2js.w3c.dom.views.Window")
+													 * "org.w3c.dom.views.Window")
 													 */) {
 
 			if (name.equals("setInterval")) {
@@ -796,7 +798,7 @@ public class JavaScriptGenerator extends Generator {
 				property = property.substring(0, 1).toLowerCase() + property.substring(1);
 
 				// if
-				// (methodBinding.equals("j2js.w3c.dom.html.HTMLFrameElement")
+				// (methodBinding.equals("org.w3c.dom.html.HTMLFrameElement")
 				// &&
 				// property.equals("contentDocument"))
 				// property = "document";
