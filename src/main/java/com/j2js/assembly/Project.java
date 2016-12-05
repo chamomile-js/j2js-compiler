@@ -13,6 +13,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Stack;
 
+import org.apache.bcel.classfile.AnnotationEntry;
 import org.apache.bcel.generic.ArrayType;
 import org.apache.bcel.generic.ObjectType;
 import org.apache.bcel.generic.ReferenceType;
@@ -214,7 +215,7 @@ public class Project implements Serializable {
     if (classUnit != null)
       return classUnit;
 
-    Signature signature = Project.singleton.getSignature(className);System.out.println("::::>>>>>>"+className);
+    Signature signature = Project.singleton.getSignature(className);
     classUnit = new ClassUnit(this, signature);
     classesByName.put(className, classUnit);
 
@@ -250,20 +251,20 @@ public class Project implements Serializable {
   public ProcedureUnit getOrCreateProcedureUnit(MethodBinding methodBinding) {
     Signature signature = Project.singleton.getSignature(methodBinding.getRelativeSignature());
     String className = methodBinding.getDeclaringClass().getClassName();
-    return (ProcedureUnit) getOrCreateMemberUnit(className, signature);
+    return (ProcedureUnit) getOrCreateMemberUnit(className, signature, methodBinding.getAnnotations());
   }
 
-  private MemberUnit getOrCreateMemberUnit(String className, Signature signature) {
+  private MemberUnit getOrCreateMemberUnit(String className, Signature signature, AnnotationEntry[] annotations) {
     MemberUnit member = getMemberUnitOrNull(className, signature);
 
     if (member == null) {
       ClassUnit clazz = getClassUnit(className);
       if (signature.isMethod()) {
-        member = new MethodUnit(signature, clazz);
+        member = new MethodUnit(signature, clazz, annotations);
       } else if (signature.isConstructor()) {
-        member = new ConstructorUnit(signature, clazz);
+        member = new ConstructorUnit(signature, clazz, annotations);
       } else {
-        member = new FieldUnit(signature, clazz);
+        member = new FieldUnit(signature, clazz, annotations);
       }
 
     }
@@ -278,15 +279,14 @@ public class Project implements Serializable {
     if (array.length == 1) {
       unit = getOrCreateClassUnit(signature);
     } else {
-      unit = getOrCreateMemberUnit(array[0],
-          Project.singleton.getSignature(array[1]));
+      unit = getOrCreateMemberUnit(array[0], Project.singleton.getSignature(array[1]), null);
     }
     return unit;
   }
   //@formatter:on
 
   public FieldUnit getOrCreateFieldUnit(ObjectType type, String name) {
-    return (FieldUnit) getOrCreateMemberUnit(type.getClassName(), Project.singleton.getSignature(name));
+    return (FieldUnit) getOrCreateMemberUnit(type.getClassName(), Project.singleton.getSignature(name), null);
   }
 
   public void addReference(MethodDeclaration decl, FieldAccess fa) {
@@ -326,7 +326,7 @@ public class Project implements Serializable {
       clazz.setResolved(true);
       // We need a member (and we chose length) in addReference(..) to taint
       // the class.
-      new FieldUnit(getSignature("length"), clazz);
+      new FieldUnit(getSignature("length"), clazz, null);
 
       TypeDeclaration typeDecl = new TypeDeclaration(new ObjectType(clazz.getName()), 0);
       typeDecl.setSuperType(Type.OBJECT);

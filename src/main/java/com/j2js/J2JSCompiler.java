@@ -150,18 +150,23 @@ public class J2JSCompiler {
 
     assembly.addEntryPoint(assembly.getEntryPointClassName() + "#main(java.lang.String[])void");
 
+    //
+    // taint all entry points...
+    //
+    
     for (String memberSignature : assembly.entryPoints) {
       assembly.taint(memberSignature);
     }
 
     long startTime = System.currentTimeMillis();
 
+    //
     // Used by the JavaScript JVM. The static code analyzer would miss these.
-
+    //
+    
     String[] signatures = Utils.getProperty("j2js.preTaintedSignatures").split(";");
-    for (int i = 0; i < signatures.length; i++) {
-      //sLog.d("assembly.taint: %s", signatures[i]);
-      assembly.taint(signatures[i]);
+    for (String signature :  signatures) {
+      assembly.taint(signature);
     }
 
     if (J2JSCompiler.compiler.getSingleEntryPoint() != null) {

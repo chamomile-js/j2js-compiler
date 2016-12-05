@@ -1016,7 +1016,7 @@ public class Pass1 {
             case Const.DCMPG : {
                 // Format: dcmpg
                 // Operand stack: ..., value1(), value2() -> ..., result(int)
-                MethodBinding binding = MethodBinding.lookup("javascript.Utils", "cmp", "(DDI)I");
+                MethodBinding binding = MethodBinding.lookup("javascript.Utils", "cmp", "(DDI)I", null);
                 MethodInvocation mi = new MethodInvocation(methodDecl, binding);
                 
                 Expression value2 = stack.pop();

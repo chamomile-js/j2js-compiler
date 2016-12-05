@@ -564,7 +564,7 @@ public class JavaScriptGenerator extends Generator {
 
 	public void visit(ClassLiteral literal) {
 		MethodBinding binding = MethodBinding.lookup("java.lang.Class", "forName",
-				"(Ljava/lang/String;)Ljava/lang/Class;");
+				"(Ljava/lang/String;)Ljava/lang/Class;", null);
 		MethodInvocation mi = new MethodInvocation(currentMethodDeclaration, binding);
 		mi.addArgument(new StringLiteral(literal.getSignature().toString()));
 		visit(mi);

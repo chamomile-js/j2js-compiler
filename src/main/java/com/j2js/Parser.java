@@ -8,6 +8,7 @@ import java.lang.reflect.Modifier;
 import com.j2js.Pass1;
 import com.j2js.ParseException;
 
+import org.apache.bcel.classfile.AnnotationEntry;
 import org.apache.bcel.classfile.Attribute;
 import org.apache.bcel.classfile.AttributeReader;
 import org.apache.bcel.classfile.ClassParser;
@@ -105,7 +106,7 @@ public class Parser {
             // will call Comparator.compare(String, String)). Those methods are essential!
             //if (Modifier.isVolatile(method.getAccessFlags())) continue;
             
-            MethodBinding binding = MethodBinding.lookup(jc.getClassName(), method.getName(), method.getSignature());
+            MethodBinding binding = MethodBinding.lookup(jc.getClassName(), method.getName(), method.getSignature(), method.getAnnotationEntries());
             
             if (J2JSCompiler.compiler.getSingleEntryPoint() != null) {
                 Signature signature = Project.getSingleton().getSignature(binding.toString());
@@ -169,7 +170,7 @@ public class Parser {
          
          Block body = new Block();
          ThrowStatement throwStmt = new ThrowStatement();
-         MethodBinding binding = MethodBinding.lookup("java.lang.RuntimeException", "<init>", "(java/lang/String)V;");
+         MethodBinding binding = MethodBinding.lookup("java.lang.RuntimeException", "<init>", "(java/lang/String)V;", null);
          ClassInstanceCreation cic = new ClassInstanceCreation(methodDecl, binding);
          cic.addArgument(new StringLiteral("Unresolved decompilation problem"));
          throwStmt.setExpression(cic);

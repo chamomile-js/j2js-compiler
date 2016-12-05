@@ -8,6 +8,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.apache.bcel.Constants;
+import org.apache.bcel.classfile.AnnotationEntry;
 import org.apache.bcel.classfile.ConstantCP;
 import org.apache.bcel.classfile.ConstantNameAndType;
 import org.apache.bcel.classfile.ConstantPool;
@@ -31,10 +32,10 @@ public class MethodBinding {
       String name = nameAndType.getName(constantPool);
       String signature = nameAndType.getSignature(constantPool);
       
-      return lookup(methodRef.getClass(constantPool), name, signature);
+      return lookup(methodRef.getClass(constantPool), name, signature, null);
    }
    
-   public static MethodBinding lookup(String className, String name, String signature) {
+   public static MethodBinding lookup(String className, String name, String signature, AnnotationEntry[] annotations) {
       String key = className + "#" + name + signature;
       
       MethodBinding binding = methodBindingsByKey.get(key);
@@ -47,6 +48,7 @@ public class MethodBinding {
       binding.parameterTypes = Type.getArgumentTypes(signature);
       binding.returnType = Type.getReturnType(signature);
       binding.signature = signature;
+      binding.annotations = annotations;
       
       methodBindingsByKey.put(key, binding);
       
@@ -58,6 +60,7 @@ public class MethodBinding {
    private Type[] parameterTypes;
    private Type returnType;
    private String signature;
+   private AnnotationEntry[] annotations;
    
    private MethodBinding() {}
    
@@ -102,9 +105,13 @@ public class MethodBinding {
       return signature;
    }
    
-   public String toString() {
-      return getDeclaringClass().getClassName() + "#" + getRelativeSignature();
-   }
+	public AnnotationEntry[] getAnnotations() {
+		return annotations;
+	}
+
+	public String toString() {
+		return getDeclaringClass().getClassName() + "#" + getRelativeSignature();
+	}
    
    public String getRelativeSignature() {
       String signature = getName() + "(";

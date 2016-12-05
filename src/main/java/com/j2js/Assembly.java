@@ -12,6 +12,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 
+import org.apache.bcel.classfile.AnnotationEntry;
 import org.apache.commons.io.IOUtils;
 
 import com.j2js.assembly.ClassUnit;
@@ -37,9 +38,12 @@ public class Assembly {
   private transient String entryPointClassName;
 
   private Project project;
+  
   private Set<Signature> taintedSignatures = new HashSet<Signature>();
   private Set<Signature> unprocessedTaintedSignatures = new HashSet<Signature>();
+  
   String[] patterns;
+  
   private Collection<ClassUnit> resolvedTypes = new ArrayList<ClassUnit>();
   private transient File targetLocation;
 
@@ -52,7 +56,6 @@ public class Assembly {
       pattern = pattern.replaceAll("\\*", ".*");
       pattern = pattern.replaceAll("\\(", "\\\\(");
       pattern = pattern.replaceAll("\\)", "\\\\)");
-      System.out.println(pattern);
       patterns[i] = pattern;
     }
   }
@@ -261,6 +264,20 @@ public class Assembly {
         // should not be the case!
 //        System.out.println(clazz.toString());
         for (MemberUnit member : clazz.getDeclaredMembers()) {
+        	
+        	//
+        	// TODO annotations...
+        	//
+        	
+        	AnnotationEntry[] annotations = member.getAnnotations();
+        	if (annotations != null) {
+        		for (AnnotationEntry annotation : annotations) {
+        			if("Lcom/j2js/prodmode/client/Taint;".equals(annotation.getAnnotationType())) {
+        				taint(member.getAbsoluteSignature());
+        			}
+        		}
+        	}
+        	
             for (int i=0; i<patterns.length; i++) {
                 if (member.getAbsoluteSignature().toString().matches(patterns[i])) {
                     taint(member.getAbsoluteSignature());
@@ -304,6 +321,7 @@ public class Assembly {
     
   public void taint(String signature) {
     signature = signature.replaceAll("\\s", "");
+    
 //@formatter:off
 //        if (signature.indexOf('*') != -1) {
 //            if (!signature.endsWith(".*")) {
@@ -319,15 +337,19 @@ public class Assembly {
 //            }
 //        } else {
 //@formatter:on
+    
     Signature s = Project.getSingleton().getSignature(signature);
+
     if (s.isClass()) {
       ClassUnit clazz = resolve(s.className());
       for (MemberUnit member : clazz.getDeclaredMembers()) {
+    	  System.out.println("------------> "+member);
         taint(member.getAbsoluteSignature());
       }
     } else {
       taint(s);
     }
+
 //@formatter:off
 //        }
 //@formatter:on

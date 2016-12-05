@@ -6,6 +6,8 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.Iterator;
 
+import org.apache.bcel.classfile.AnnotationEntry;
+
 import com.j2js.Log;
 
 public abstract class ProcedureUnit extends MemberUnit {
@@ -14,8 +16,8 @@ public abstract class ProcedureUnit extends MemberUnit {
   // Set of all member signatures targeted by this method.
   private Collection<Signature> targetSignatures = new HashSet<Signature>();
 
-  public ProcedureUnit(Signature theSignature, ClassUnit theDeclaringClazz) {
-    super(theSignature, theDeclaringClazz);
+  public ProcedureUnit(Signature theSignature, ClassUnit theDeclaringClazz, AnnotationEntry[] annotations) {
+    super(theSignature, theDeclaringClazz, annotations);
   }
 
   public void addTarget(Signature targetSignature) {
